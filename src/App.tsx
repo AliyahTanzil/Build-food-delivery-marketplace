@@ -23,8 +23,9 @@ import {
   Trash2,
   Utensils
 } from "lucide-react";
-import { categories, demoUser, meals, orders, products as initialProducts, restaurants } from "@/vite/data";
+import { categories, meals, orders, products as initialProducts, restaurants } from "@/vite/data";
 import type { DemoProduct } from "@/vite/data";
+import type { Role } from "@/lib/types";
 import { cn, formatMoney } from "@/lib/utils";
 
 type CartItem = {
@@ -32,6 +33,58 @@ type CartItem = {
   type: "meal" | "product";
   quantity: number;
 };
+
+type AuthUser = {
+  id: string;
+  full_name: string;
+  email: string;
+  password: string;
+  role: Role;
+  status: "active" | "pending" | "disabled";
+  address: string;
+};
+
+const authUsersKey = "freshlane-auth-users";
+const activeUserKey = "freshlane-active-user";
+
+const seedAuthUsers: AuthUser[] = [
+  {
+    id: "customer-aminata",
+    full_name: "Aminata Kamara",
+    email: "aminata.customer@example.com",
+    password: "DemoPass123!",
+    role: "customer",
+    status: "active",
+    address: "18 Lumley Beach Road, Freetown"
+  },
+  {
+    id: "seller-kadiatu",
+    full_name: "Kadiatu Conteh",
+    email: "seller@example.com",
+    password: "DemoPass123!",
+    role: "seller",
+    status: "active",
+    address: "7 Aberdeen Road, Freetown"
+  },
+  {
+    id: "driver-ibrahim",
+    full_name: "Ibrahim Sesay",
+    email: "driver@example.com",
+    password: "DemoPass123!",
+    role: "driver",
+    status: "active",
+    address: "12 Wilkinson Road, Freetown"
+  },
+  {
+    id: "admin-fatmata",
+    full_name: "Fatmata Bangura",
+    email: "admin@example.com",
+    password: "DemoPass123!",
+    role: "admin",
+    status: "active",
+    address: "FreshLane HQ, Freetown"
+  }
+];
 
 const dashboardNav = {
   customer: [
@@ -50,6 +103,21 @@ const dashboardNav = {
   driver: [["/driver", "Assigned deliveries"]],
   admin: [["/admin", "Overview"]]
 };
+
+function roleHome(role: Role) {
+  if (role === "seller") return "/seller";
+  if (role === "driver") return "/driver";
+  if (role === "admin") return "/admin";
+  return "/customer";
+}
+
+function protectedRoleForPath(path: string): Role | null {
+  if (path === "/seller") return "seller";
+  if (path === "/driver") return "driver";
+  if (path === "/admin") return "admin";
+  if (path === "/customer" || path.startsWith("/orders")) return "customer";
+  return null;
+}
 
 function navigate(path: string) {
   window.history.pushState({}, "", path);
@@ -148,7 +216,13 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
-function Navigation() {
+function Navigation({
+  currentUser,
+  onLogout
+}: {
+  currentUser: AuthUser | null;
+  onLogout: () => void;
+}) {
   return (
     <header className="sticky top-0 z-40 border-b border-ink/10 bg-cloud/95 backdrop-blur">
       <nav className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3">
@@ -168,12 +242,25 @@ function Navigation() {
           <Link href="/admin">Admin</Link>
         </div>
         <div className="flex items-center gap-2">
-          <Link className="hidden rounded-md border border-ink/15 px-4 py-2 text-sm font-semibold text-ink md:inline-flex" href="/login">
-            Log in
-          </Link>
-          <Link className="rounded-md bg-ink px-4 py-2 text-sm font-semibold text-white" href="/signup">
-            Sign up
-          </Link>
+          {currentUser ? (
+            <>
+              <Link className="hidden rounded-md border border-ink/15 px-4 py-2 text-sm font-semibold text-ink md:inline-flex" href={roleHome(currentUser.role)}>
+                {currentUser.full_name}
+              </Link>
+              <button className="rounded-md bg-ink px-4 py-2 text-sm font-semibold text-white" onClick={onLogout}>
+                Log out
+              </button>
+            </>
+          ) : (
+            <>
+              <Link className="hidden rounded-md border border-ink/15 px-4 py-2 text-sm font-semibold text-ink md:inline-flex" href="/login">
+                Log in
+              </Link>
+              <Link className="rounded-md bg-ink px-4 py-2 text-sm font-semibold text-white" href="/signup">
+                Sign up
+              </Link>
+            </>
+          )}
         </div>
       </nav>
       <div className="grid grid-cols-4 border-t border-ink/10 bg-white text-[11px] font-semibold text-ink/70 md:hidden">
@@ -194,9 +281,24 @@ function Navigation() {
   );
 }
 
-function AuthPage({ mode }: { mode: "login" | "signup" }) {
-  const [role, setRole] = useState("customer");
+function AuthPage({
+  mode,
+  users,
+  onLogin,
+  onSignup
+}: {
+  mode: "login" | "signup";
+  users: AuthUser[];
+  onLogin: (email: string, password: string) => { ok: true; user: AuthUser } | { ok: false; message: string };
+  onSignup: (user: Omit<AuthUser, "id" | "status" | "address">) => { ok: true; user: AuthUser } | { ok: false; message: string };
+}) {
+  const [fullName, setFullName] = useState("Aminata Kamara");
+  const [email, setEmail] = useState(mode === "login" ? "aminata.customer@example.com" : "");
+  const [password, setPassword] = useState("DemoPass123!");
+  const [role, setRole] = useState<Role>("customer");
+  const [message, setMessage] = useState("");
   const title = mode === "login" ? "Log in" : "Create account";
+  const demoCredentials = users.map((user) => `${user.role}: ${user.email}`).join(" | ");
 
   return (
     <main className="mx-auto grid min-h-[calc(100vh-74px)] max-w-md content-center px-4 py-10">
@@ -204,30 +306,47 @@ function AuthPage({ mode }: { mode: "login" | "signup" }) {
         className="grid gap-5 rounded-md border border-ink/10 bg-white p-6 shadow-sm"
         onSubmit={(event) => {
           event.preventDefault();
-          navigate(role === "seller" ? "/seller" : role === "driver" ? "/driver" : "/customer");
+          setMessage("");
+          const result = mode === "login"
+            ? onLogin(email, password)
+            : onSignup({ full_name: fullName, email, password, role });
+
+          if (!result.ok) {
+            setMessage(result.message);
+            return;
+          }
+
+          navigate(roleHome(result.user.role));
         }}
       >
         <div>
           <h1 className="text-3xl font-black text-ink">{title}</h1>
           <p className="mt-2 text-sm text-ink/60">
-            Demo auth flow for customers, sellers, drivers, and admins. Supabase auth can plug into the same screens with the configured client.
+            Accounts are saved locally for this demo and can be used immediately after signup. Demo logins: {demoCredentials}
           </p>
         </div>
-        {mode === "signup" ? <Field label="Full name"><Input required defaultValue="Aminata Kamara" /></Field> : null}
+        {message ? <p className="rounded-md bg-tomato/10 px-3 py-2 text-sm font-semibold text-tomato">{message}</p> : null}
+        {mode === "signup" ? (
+          <Field label="Full name">
+            <Input required value={fullName} onChange={(event) => setFullName(event.target.value)} />
+          </Field>
+        ) : null}
         <Field label="Email">
-          <Input type="email" required defaultValue={mode === "login" ? "maya.customer@example.com" : ""} />
+          <Input type="email" required value={email} onChange={(event) => setEmail(event.target.value)} />
         </Field>
         <Field label="Password">
-          <Input type="password" required defaultValue="DemoPass123!" />
+          <Input type="password" required value={password} onChange={(event) => setPassword(event.target.value)} />
         </Field>
-        <Field label="Role">
-          <Select value={role} onChange={(event) => setRole(event.target.value)}>
-            <option value="customer">Customer</option>
-            <option value="seller">Seller / Restaurant</option>
-            <option value="driver">Delivery driver</option>
-            <option value="admin">Admin</option>
-          </Select>
-        </Field>
+        {mode === "signup" ? (
+          <Field label="Role">
+            <Select value={role} onChange={(event) => setRole(event.target.value as Role)}>
+              <option value="customer">Customer</option>
+              <option value="seller">Seller / Restaurant</option>
+              <option value="driver">Delivery driver</option>
+              <option value="admin">Admin</option>
+            </Select>
+          </Field>
+        ) : null}
         <Button>{title}</Button>
         <p className="text-sm text-ink/60">
           {mode === "login" ? "New here?" : "Already registered?"}{" "}
@@ -303,6 +422,45 @@ function EmptyState({ title, body, cta, href }: { title: string; body: string; c
         {cta}
       </Link>
     </div>
+  );
+}
+
+function AuthRequired({ role }: { role: Role }) {
+  return (
+    <main className="mx-auto grid min-h-[calc(100vh-74px)] max-w-xl content-center px-4 py-10">
+      <div className="rounded-md border border-ink/10 bg-white p-8 text-center shadow-sm">
+        <ShieldCheck className="mx-auto text-leaf" size={38} />
+        <h1 className="mt-4 text-3xl font-black text-ink">Log in required</h1>
+        <p className="mt-2 text-sm text-ink/60">
+          This is a protected {role} area. Log in with an active {role} account or create one first.
+        </p>
+        <div className="mt-6 flex flex-col justify-center gap-3 sm:flex-row">
+          <Link className="inline-flex h-11 items-center justify-center rounded-md bg-ink px-5 text-sm font-semibold text-white" href="/login">
+            Log in
+          </Link>
+          <Link className="inline-flex h-11 items-center justify-center rounded-md border border-ink/15 px-5 text-sm font-semibold text-ink" href="/signup">
+            Create account
+          </Link>
+        </div>
+      </div>
+    </main>
+  );
+}
+
+function AccessDenied({ currentUser, requiredRole }: { currentUser: AuthUser; requiredRole: Role }) {
+  return (
+    <main className="mx-auto grid min-h-[calc(100vh-74px)] max-w-xl content-center px-4 py-10">
+      <div className="rounded-md border border-ink/10 bg-white p-8 text-center shadow-sm">
+        <ShieldCheck className="mx-auto text-tomato" size={38} />
+        <h1 className="mt-4 text-3xl font-black text-ink">Wrong account role</h1>
+        <p className="mt-2 text-sm text-ink/60">
+          {currentUser.full_name} is logged in as {currentUser.role}. This page requires an active {requiredRole} account.
+        </p>
+        <Link className="mt-6 inline-flex h-11 items-center justify-center rounded-md bg-ink px-5 text-sm font-semibold text-white" href={roleHome(currentUser.role)}>
+          Go to my dashboard
+        </Link>
+      </div>
+    </main>
   );
 }
 
@@ -746,11 +904,11 @@ function DashboardShell({ title, subtitle, nav, children }: { title: string; sub
   );
 }
 
-function CustomerDashboard() {
+function CustomerDashboard({ currentUser }: { currentUser: AuthUser }) {
   return (
-    <DashboardShell title="Customer" subtitle={`Welcome back, ${demoUser.full_name}.`} nav={dashboardNav.customer}>
+    <DashboardShell title="Customer" subtitle={`Welcome back, ${currentUser.full_name}.`} nav={dashboardNav.customer}>
       <div className="grid gap-6">
-        <Stats cards={[["Active orders", "1", Clock], ["Saved address", "94111", MapPin], ["Recent spend", formatMoney(5534), PackageCheck]]} />
+        <Stats cards={[["Active orders", "1", Clock], ["Saved address", currentUser.address, MapPin], ["Recent spend", formatMoney(5534), PackageCheck]]} />
         <Panel title="Recent orders" actionHref="/orders" action="View orders">
           {orders.map((order) => <Row key={order.id} left={`Order ${order.id}`} sub={order.status.replaceAll("_", " ")} right={formatMoney(order.total_cents)} href={`/orders/${order.id}`} />)}
         </Panel>
@@ -760,11 +918,13 @@ function CustomerDashboard() {
 }
 
 function SellerDashboard({
+  currentUser,
   productCatalog,
   addProduct,
   updateProduct,
   deleteProduct
 }: {
+  currentUser: AuthUser;
   productCatalog: DemoProduct[];
   addProduct: (product: DemoProduct) => void;
   updateProduct: (id: string, updates: Partial<DemoProduct>) => void;
@@ -783,7 +943,7 @@ function SellerDashboard({
   });
 
   return (
-    <DashboardShell title="Seller" subtitle="Manage stores, listings, and fulfillment." nav={dashboardNav.seller}>
+    <DashboardShell title="Seller" subtitle={`${currentUser.full_name}, manage stores, listings, and fulfillment.`} nav={dashboardNav.seller}>
       <div className="grid gap-6">
         <Stats cards={[["Approval", "approved", ShieldCheck], ["Restaurants", "5", Store], ["Listings", "25", Package], ["Incoming orders", "8", Clock]]} />
         <section className="grid gap-6 lg:grid-cols-2">
@@ -926,11 +1086,11 @@ function ProductEditor({
   );
 }
 
-function DriverDashboard() {
+function DriverDashboard({ currentUser }: { currentUser: AuthUser }) {
   const [deliveryStatus, setDeliveryStatus] = useState("accepted");
 
   return (
-    <DashboardShell title="Driver" subtitle="Accept assigned deliveries and update progress." nav={dashboardNav.driver}>
+    <DashboardShell title="Driver" subtitle={`${currentUser.full_name}, accept assigned deliveries and update progress.`} nav={dashboardNav.driver}>
       <Panel title="Assigned deliveries">
         {orders.map((order) => (
           <div key={order.id} className="grid gap-3 rounded-md bg-cloud p-3 md:grid-cols-[1fr_180px_auto] md:items-center">
@@ -949,11 +1109,11 @@ function DriverDashboard() {
   );
 }
 
-function AdminDashboard() {
+function AdminDashboard({ currentUser }: { currentUser: AuthUser }) {
   const [sellerStatus, setSellerStatus] = useState("approved");
 
   return (
-    <DashboardShell title="Admin" subtitle="Manage users, sellers, listings, categories, revenue, and commission." nav={dashboardNav.admin}>
+    <DashboardShell title="Admin" subtitle={`${currentUser.full_name}, manage users, sellers, listings, categories, revenue, and commission.`} nav={dashboardNav.admin}>
       <div className="grid gap-6">
         <Stats cards={[["Orders", "24", ShoppingCart], ["Revenue", formatMoney(128940), CreditCard], ["Commission", formatMoney(15472), ShieldCheck], ["Categories", "5", Package]]} />
         <section className="grid gap-6 lg:grid-cols-2">
@@ -1024,6 +1184,18 @@ function Row({ left, sub, right, href }: { left: string; sub: string; right: str
 
 export default function App() {
   const path = usePath();
+  const [users, setUsers] = useState<AuthUser[]>(() => {
+    try {
+      const stored = JSON.parse(localStorage.getItem(authUsersKey) ?? "[]") as AuthUser[];
+      const emails = new Set(stored.map((user) => user.email.toLowerCase()));
+      const missingSeeds = seedAuthUsers.filter((user) => !emails.has(user.email.toLowerCase()));
+      return [...stored, ...missingSeeds];
+    } catch {
+      return seedAuthUsers;
+    }
+  });
+  const [currentUserId, setCurrentUserId] = useState<string | null>(() => localStorage.getItem(activeUserKey));
+  const currentUser = useMemo(() => users.find((user) => user.id === currentUserId) ?? null, [currentUserId, users]);
   const [productCatalog, setProductCatalog] = useState<DemoProduct[]>(() => {
     try {
       return JSON.parse(localStorage.getItem("freshlane-products") ?? "null") as DemoProduct[] || initialProducts;
@@ -1038,6 +1210,18 @@ export default function App() {
       return [];
     }
   });
+
+  useEffect(() => {
+    localStorage.setItem(authUsersKey, JSON.stringify(users));
+  }, [users]);
+
+  useEffect(() => {
+    if (currentUserId) {
+      localStorage.setItem(activeUserKey, currentUserId);
+    } else {
+      localStorage.removeItem(activeUserKey);
+    }
+  }, [currentUserId]);
 
   useEffect(() => {
     localStorage.setItem("freshlane-cart", JSON.stringify(cart));
@@ -1077,10 +1261,62 @@ export default function App() {
     setCart((current) => current.filter((item) => item.type !== "product" || item.id !== id));
   };
 
+  const login = (email: string, password: string) => {
+    const normalizedEmail = email.trim().toLowerCase();
+    const user = users.find((item) => item.email.toLowerCase() === normalizedEmail);
+
+    if (!user || user.password !== password) {
+      return { ok: false as const, message: "Email or password is incorrect." };
+    }
+
+    if (user.status !== "active") {
+      return { ok: false as const, message: "This account is not active yet." };
+    }
+
+    setCurrentUserId(user.id);
+    return { ok: true as const, user };
+  };
+
+  const signup = (user: Omit<AuthUser, "id" | "status" | "address">) => {
+    const normalizedEmail = user.email.trim().toLowerCase();
+
+    if (users.some((item) => item.email.toLowerCase() === normalizedEmail)) {
+      return { ok: false as const, message: "An account with this email already exists. Log in instead." };
+    }
+
+    const createdUser: AuthUser = {
+      ...user,
+      id: `${user.role}-${Date.now()}`,
+      email: normalizedEmail,
+      full_name: user.full_name.trim(),
+      status: "active",
+      address: "New delivery address"
+    };
+
+    setUsers((current) => [createdUser, ...current]);
+    setCurrentUserId(createdUser.id);
+    return { ok: true as const, user: createdUser };
+  };
+
+  const logout = () => {
+    setCurrentUserId(null);
+    navigate("/login");
+  };
+
   const page = useMemo(() => {
+    const requiredRole = protectedRoleForPath(path);
+
+    if (requiredRole && !currentUser) {
+      return <AuthRequired role={requiredRole} />;
+    }
+
+    if (requiredRole && currentUser && currentUser.role !== requiredRole) {
+      return <AccessDenied currentUser={currentUser} requiredRole={requiredRole} />;
+    }
+
     if (path === "/") return <HomePage productCatalog={productCatalog} />;
-    if (path === "/login") return <AuthPage mode="login" />;
-    if (path === "/signup") return <AuthPage mode="signup" />;
+    if (path === "/login") return <AuthPage mode="login" users={users} onLogin={login} onSignup={signup} />;
+    if (path === "/signup") return <AuthPage mode="signup" users={users} onLogin={login} onSignup={signup} />;
     if (path === "/restaurants") return <RestaurantsPage />;
     if (path.startsWith("/restaurants/")) return <RestaurantDetailPage id={path.split("/").pop() ?? ""} />;
     if (path === "/products") return <ProductsPage productCatalog={productCatalog} />;
@@ -1090,16 +1326,16 @@ export default function App() {
     if (path === "/checkout") return <CheckoutPage cart={cart} productCatalog={productCatalog} />;
     if (path === "/orders") return <OrdersPage />;
     if (path.startsWith("/orders/")) return <OrderTrackingPage id={path.split("/").pop() ?? ""} />;
-    if (path === "/customer") return <CustomerDashboard />;
-    if (path === "/seller") return <SellerDashboard productCatalog={productCatalog} addProduct={addProduct} updateProduct={updateProduct} deleteProduct={deleteProduct} />;
-    if (path === "/driver") return <DriverDashboard />;
-    if (path === "/admin") return <AdminDashboard />;
+    if (path === "/customer" && currentUser) return <CustomerDashboard currentUser={currentUser} />;
+    if (path === "/seller" && currentUser) return <SellerDashboard currentUser={currentUser} productCatalog={productCatalog} addProduct={addProduct} updateProduct={updateProduct} deleteProduct={deleteProduct} />;
+    if (path === "/driver" && currentUser) return <DriverDashboard currentUser={currentUser} />;
+    if (path === "/admin" && currentUser) return <AdminDashboard currentUser={currentUser} />;
     return <EmptyState title="Page not found" body="That route is not available in the Vite app." cta="Go home" href="/" />;
-  }, [cart, path, productCatalog]);
+  }, [cart, currentUser, path, productCatalog, users]);
 
   return (
     <>
-      <Navigation />
+      <Navigation currentUser={currentUser} onLogout={logout} />
       {page}
     </>
   );
