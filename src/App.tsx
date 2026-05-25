@@ -20,6 +20,7 @@ import {
   Soup,
   Star,
   Store,
+  Trash2,
   Utensils
 } from "lucide-react";
 import { categories, demoUser, meals, orders, products as initialProducts, restaurants } from "@/vite/data";
@@ -501,7 +502,8 @@ function ProductsPage({ productCatalog }: { productCatalog: DemoProduct[] }) {
   const filtered = productCatalog.filter((product) => {
     const matchesQuery = product.name.toLowerCase().includes(query.toLowerCase());
     const matchesCategory = !category || product.category_slug === category;
-    return matchesQuery && matchesCategory;
+    const isAvailable = product.is_available ?? true;
+    return matchesQuery && matchesCategory && isAvailable;
   });
 
   return (
@@ -760,11 +762,13 @@ function CustomerDashboard() {
 function SellerDashboard({
   productCatalog,
   addProduct,
-  updateProduct
+  updateProduct,
+  deleteProduct
 }: {
   productCatalog: DemoProduct[];
   addProduct: (product: DemoProduct) => void;
   updateProduct: (id: string, updates: Partial<DemoProduct>) => void;
+  deleteProduct: (id: string) => void;
 }) {
   const [orderState, setOrderState] = useState("accepted");
   const [newProduct, setNewProduct] = useState<DemoProduct>({
@@ -774,7 +778,8 @@ function SellerDashboard({
     description: "Fresh African pantry or ready meal listing.",
     image_url: "https://images.unsplash.com/photo-1604329760661-e71dc83f8f26?auto=format&fit=crop&w=1200&q=80",
     price_cents: 1450,
-    stock: 20
+    stock: 20,
+    is_available: true
   });
 
   return (
@@ -795,10 +800,10 @@ function SellerDashboard({
               event.preventDefault();
               const id = newProduct.name.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)+/g, "") || `product-${Date.now()}`;
               addProduct({ ...newProduct, id });
-              setNewProduct({ ...newProduct, id: "new-product", name: "", description: "", stock: 10, price_cents: 1000 });
+              setNewProduct({ ...newProduct, id: "new-product", name: "", description: "", stock: 10, price_cents: 1000, is_available: true });
             }}
           >
-            <h2 className="text-xl font-black text-ink">Add meal or packaged product</h2>
+            <h2 className="text-xl font-black text-ink">Create product listing</h2>
             <div className="grid gap-4 md:grid-cols-2">
               <Field label="Category">
                 <Select value={newProduct.category_slug} onChange={(event) => setNewProduct((product) => ({ ...product, category_slug: event.target.value }))}>
@@ -812,14 +817,26 @@ function SellerDashboard({
             <Field label="Name"><Input value={newProduct.name} onChange={(event) => setNewProduct((product) => ({ ...product, name: event.target.value }))} /></Field>
             <Field label="Image URL"><Input value={newProduct.image_url} onChange={(event) => setNewProduct((product) => ({ ...product, image_url: event.target.value }))} /></Field>
             <Field label="Description"><Textarea value={newProduct.description} onChange={(event) => setNewProduct((product) => ({ ...product, description: event.target.value }))} /></Field>
-            <Field label="Stock"><Input type="number" min={0} value={newProduct.stock} onChange={(event) => setNewProduct((product) => ({ ...product, stock: Number(event.target.value || 0) }))} /></Field>
+            <div className="grid gap-4 md:grid-cols-2">
+              <Field label="Stock"><Input type="number" min={0} value={newProduct.stock} onChange={(event) => setNewProduct((product) => ({ ...product, stock: Number(event.target.value || 0) }))} /></Field>
+              <Field label="Availability">
+                <Select value={newProduct.is_available === false ? "unavailable" : "available"} onChange={(event) => setNewProduct((product) => ({ ...product, is_available: event.target.value === "available" }))}>
+                  <option value="available">Available in marketplace</option>
+                  <option value="unavailable">Hidden from marketplace</option>
+                </Select>
+              </Field>
+            </div>
             <Button>Add listing</Button>
           </form>
         </section>
-        <Panel title="Edit marketplace products">
-          {productCatalog.map((product) => (
-            <ProductEditor key={product.id} product={product} updateProduct={updateProduct} />
-          ))}
+        <Panel title="Marketplace product CRUD">
+          {productCatalog.length > 0 ? (
+            productCatalog.map((product) => (
+              <ProductEditor key={product.id} product={product} updateProduct={updateProduct} deleteProduct={deleteProduct} />
+            ))
+          ) : (
+            <EmptyState title="No products yet" body="Create a product listing above to publish it into the marketplace." cta="Browse marketplace" href="/products" />
+          )}
         </Panel>
         <Panel title="Incoming order controls">
           {orders.map((order) => (
@@ -846,10 +863,12 @@ function SellerDashboard({
 
 function ProductEditor({
   product,
-  updateProduct
+  updateProduct,
+  deleteProduct
 }: {
   product: DemoProduct;
   updateProduct: (id: string, updates: Partial<DemoProduct>) => void;
+  deleteProduct: (id: string) => void;
 }) {
   return (
     <div className="grid gap-4 rounded-md bg-cloud p-4 lg:grid-cols-[120px_1fr]">
@@ -879,9 +898,28 @@ function ProductEditor({
             <Input type="number" min={0} value={product.stock} onChange={(event) => updateProduct(product.id, { stock: Number(event.target.value || 0) })} />
           </Field>
         </div>
+        <Field label="Availability">
+          <Select value={product.is_available === false ? "unavailable" : "available"} onChange={(event) => updateProduct(product.id, { is_available: event.target.value === "available" })}>
+            <option value="available">Available in marketplace</option>
+            <option value="unavailable">Hidden from marketplace</option>
+          </Select>
+        </Field>
         <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-ink/60">
           <span>Route: /products/{product.id}</span>
-          <Link href={`/products/${product.id}`} className="font-bold text-leaf">Preview listing</Link>
+          <div className="flex flex-wrap gap-3">
+            <Link href={`/products/${product.id}`} className="font-bold text-leaf">Preview listing</Link>
+            <button
+              type="button"
+              className="inline-flex items-center gap-1 font-bold text-tomato"
+              onClick={() => {
+                if (window.confirm(`Delete ${product.name}? This removes it from the marketplace and cart.`)) {
+                  deleteProduct(product.id);
+                }
+              }}
+            >
+              <Trash2 size={15} /> Delete
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -1034,6 +1072,11 @@ export default function App() {
     setProductCatalog((current) => current.map((product) => product.id === id ? { ...product, ...updates } : product));
   };
 
+  const deleteProduct = (id: string) => {
+    setProductCatalog((current) => current.filter((product) => product.id !== id));
+    setCart((current) => current.filter((item) => item.type !== "product" || item.id !== id));
+  };
+
   const page = useMemo(() => {
     if (path === "/") return <HomePage productCatalog={productCatalog} />;
     if (path === "/login") return <AuthPage mode="login" />;
@@ -1048,7 +1091,7 @@ export default function App() {
     if (path === "/orders") return <OrdersPage />;
     if (path.startsWith("/orders/")) return <OrderTrackingPage id={path.split("/").pop() ?? ""} />;
     if (path === "/customer") return <CustomerDashboard />;
-    if (path === "/seller") return <SellerDashboard productCatalog={productCatalog} addProduct={addProduct} updateProduct={updateProduct} />;
+    if (path === "/seller") return <SellerDashboard productCatalog={productCatalog} addProduct={addProduct} updateProduct={updateProduct} deleteProduct={deleteProduct} />;
     if (path === "/driver") return <DriverDashboard />;
     if (path === "/admin") return <AdminDashboard />;
     return <EmptyState title="Page not found" body="That route is not available in the Vite app." cta="Go home" href="/" />;

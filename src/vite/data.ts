@@ -36,6 +36,7 @@ export type DemoProduct = {
   image_url: string;
   price_cents: number;
   stock: number;
+  is_available?: boolean;
 };
 
 export type DemoOrder = {
