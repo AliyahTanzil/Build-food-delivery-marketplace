@@ -1,0 +1,958 @@
+import { useEffect, useMemo, useState } from "react";
+import type React from "react";
+import {
+  ArrowRight,
+  Bike,
+  CheckCircle2,
+  Clock,
+  Coffee,
+  CreditCard,
+  LayoutDashboard,
+  MapPin,
+  Package,
+  PackageCheck,
+  Search,
+  ShieldCheck,
+  SlidersHorizontal,
+  ShoppingBag,
+  ShoppingBasket,
+  ShoppingCart,
+  Soup,
+  Star,
+  Store,
+  Utensils
+} from "lucide-react";
+import { categories, demoUser, meals, orders, products, restaurants } from "@/vite/data";
+import { cn, formatMoney } from "@/lib/utils";
+
+type CartItem = {
+  id: string;
+  type: "meal" | "product";
+  quantity: number;
+};
+
+const dashboardNav = {
+  customer: [
+    ["/customer", "Overview"],
+    ["/orders", "Orders"],
+    ["/cart", "Cart"],
+    ["/restaurants", "Restaurants"],
+    ["/products", "Packaged foods"]
+  ],
+  seller: [
+    ["/seller", "Overview"],
+    ["/seller", "Restaurant / store"],
+    ["/seller", "Meals and products"],
+    ["/seller", "Orders"]
+  ],
+  driver: [["/driver", "Assigned deliveries"]],
+  admin: [["/admin", "Overview"]]
+};
+
+function navigate(path: string) {
+  window.history.pushState({}, "", path);
+  window.dispatchEvent(new PopStateEvent("popstate"));
+  window.scrollTo({ top: 0 });
+}
+
+function usePath() {
+  const [path, setPath] = useState(window.location.pathname);
+
+  useEffect(() => {
+    const onPop = () => setPath(window.location.pathname);
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
+
+  return path;
+}
+
+function Link({
+  href,
+  className,
+  children
+}: {
+  href: string;
+  className?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <a
+      href={href}
+      className={className}
+      onClick={(event) => {
+        if (href.startsWith("/")) {
+          event.preventDefault();
+          navigate(href);
+        }
+      }}
+    >
+      {children}
+    </a>
+  );
+}
+
+function Button({
+  className,
+  ...props
+}: React.ButtonHTMLAttributes<HTMLButtonElement>) {
+  return (
+    <button
+      className={cn(
+        "inline-flex h-11 items-center justify-center rounded-md bg-ink px-5 text-sm font-semibold text-white transition hover:bg-leaf disabled:opacity-60",
+        className
+      )}
+      {...props}
+    />
+  );
+}
+
+function Input(props: React.InputHTMLAttributes<HTMLInputElement>) {
+  const { className, ...rest } = props;
+  return (
+    <input
+      className={cn("h-11 w-full rounded-md border border-ink/15 bg-white px-3 text-sm outline-none ring-leaf/20 transition focus:border-leaf focus:ring-4", className)}
+      {...rest}
+    />
+  );
+}
+
+function Select(props: React.SelectHTMLAttributes<HTMLSelectElement>) {
+  const { className, ...rest } = props;
+  return (
+    <select
+      className={cn("h-11 w-full rounded-md border border-ink/15 bg-white px-3 text-sm outline-none ring-leaf/20 transition focus:border-leaf focus:ring-4", className)}
+      {...rest}
+    />
+  );
+}
+
+function Textarea(props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
+  const { className, ...rest } = props;
+  return (
+    <textarea
+      className={cn("min-h-28 w-full rounded-md border border-ink/15 bg-white px-3 py-3 text-sm outline-none ring-leaf/20 transition focus:border-leaf focus:ring-4", className)}
+      {...rest}
+    />
+  );
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <label className="grid gap-2 text-sm font-medium text-ink/80">
+      {label}
+      {children}
+    </label>
+  );
+}
+
+function Navigation() {
+  return (
+    <header className="sticky top-0 z-40 border-b border-ink/10 bg-cloud/95 backdrop-blur">
+      <nav className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3">
+        <Link href="/" className="flex items-center gap-2 font-black tracking-tight text-ink">
+          <span className="grid size-9 place-items-center rounded-md bg-leaf text-white">
+            <ShoppingBag size={18} />
+          </span>
+          FreshLane
+        </Link>
+        <div className="hidden items-center gap-5 text-sm font-medium text-ink/70 md:flex">
+          <Link href="/restaurants">Restaurants</Link>
+          <Link href="/products">Packaged Foods</Link>
+          <Link href="/cart">Cart</Link>
+          <Link href="/customer">Customer</Link>
+          <Link href="/seller">Seller</Link>
+          <Link href="/driver">Driver</Link>
+          <Link href="/admin">Admin</Link>
+        </div>
+        <div className="flex items-center gap-2">
+          <Link className="hidden rounded-md border border-ink/15 px-4 py-2 text-sm font-semibold text-ink md:inline-flex" href="/login">
+            Log in
+          </Link>
+          <Link className="rounded-md bg-ink px-4 py-2 text-sm font-semibold text-white" href="/signup">
+            Sign up
+          </Link>
+        </div>
+      </nav>
+      <div className="grid grid-cols-4 border-t border-ink/10 bg-white text-[11px] font-semibold text-ink/70 md:hidden">
+        <Link className="flex flex-col items-center gap-1 py-2" href="/restaurants">
+          <Store size={16} /> Food
+        </Link>
+        <Link className="flex flex-col items-center gap-1 py-2" href="/products">
+          <ShoppingBag size={16} /> Shop
+        </Link>
+        <Link className="flex flex-col items-center gap-1 py-2" href="/orders">
+          <Bike size={16} /> Orders
+        </Link>
+        <Link className="flex flex-col items-center gap-1 py-2" href="/customer">
+          <LayoutDashboard size={16} /> Account
+        </Link>
+      </div>
+    </header>
+  );
+}
+
+function AuthPage({ mode }: { mode: "login" | "signup" }) {
+  const [role, setRole] = useState("customer");
+  const title = mode === "login" ? "Log in" : "Create account";
+
+  return (
+    <main className="mx-auto grid min-h-[calc(100vh-74px)] max-w-md content-center px-4 py-10">
+      <form
+        className="grid gap-5 rounded-md border border-ink/10 bg-white p-6 shadow-sm"
+        onSubmit={(event) => {
+          event.preventDefault();
+          navigate(role === "seller" ? "/seller" : role === "driver" ? "/driver" : "/customer");
+        }}
+      >
+        <div>
+          <h1 className="text-3xl font-black text-ink">{title}</h1>
+          <p className="mt-2 text-sm text-ink/60">
+            Demo auth flow for customers, sellers, drivers, and admins. Supabase auth can plug into the same screens with the configured client.
+          </p>
+        </div>
+        {mode === "signup" ? <Field label="Full name"><Input required defaultValue="Aminata Kamara" /></Field> : null}
+        <Field label="Email">
+          <Input type="email" required defaultValue={mode === "login" ? "maya.customer@example.com" : ""} />
+        </Field>
+        <Field label="Password">
+          <Input type="password" required defaultValue="DemoPass123!" />
+        </Field>
+        <Field label="Role">
+          <Select value={role} onChange={(event) => setRole(event.target.value)}>
+            <option value="customer">Customer</option>
+            <option value="seller">Seller / Restaurant</option>
+            <option value="driver">Delivery driver</option>
+            <option value="admin">Admin</option>
+          </Select>
+        </Field>
+        <Button>{title}</Button>
+        <p className="text-sm text-ink/60">
+          {mode === "login" ? "New here?" : "Already registered?"}{" "}
+          <Link href={mode === "login" ? "/signup" : "/login"} className="font-bold text-leaf">
+            {mode === "login" ? "Create an account" : "Log in"}
+          </Link>
+        </p>
+      </form>
+    </main>
+  );
+}
+
+function ItemCard({
+  id,
+  type,
+  name,
+  description,
+  imageUrl,
+  priceCents,
+  meta
+}: {
+  id: string;
+  type: "meal" | "product" | "restaurant";
+  name: string;
+  description: string;
+  imageUrl: string;
+  priceCents?: number;
+  meta: string;
+}) {
+  const href =
+    type === "restaurant" ? `/restaurants/${id}` : type === "meal" ? `/meals/${id}` : `/products/${id}`;
+
+  return (
+    <Link
+      href={href}
+      className="group overflow-hidden rounded-md border border-ink/10 bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-soft"
+    >
+      <div className="relative aspect-[4/3] overflow-hidden bg-ink/5">
+        <img src={imageUrl} alt={name} className="size-full object-cover transition duration-300 group-hover:scale-105" />
+      </div>
+      <div className="grid gap-3 p-4">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h3 className="line-clamp-1 font-semibold text-ink">{name}</h3>
+            <p className="mt-1 line-clamp-2 text-sm text-ink/60">{description}</p>
+          </div>
+          {priceCents != null ? (
+            <span className="rounded-md bg-saffron/20 px-2 py-1 text-sm font-bold text-ink">
+              {formatMoney(priceCents)}
+            </span>
+          ) : null}
+        </div>
+        <div className="flex items-center gap-3 text-xs font-medium text-ink/55">
+          <span className="inline-flex items-center gap-1">
+            <Star size={14} className="fill-saffron text-saffron" /> 4.8
+          </span>
+          <span className="inline-flex items-center gap-1">
+            {type === "product" ? <PackageCheck size={14} /> : <Clock size={14} />}
+            {meta}
+          </span>
+        </div>
+      </div>
+    </Link>
+  );
+}
+
+function EmptyState({ title, body, cta, href }: { title: string; body: string; cta: string; href: string }) {
+  return (
+    <div className="rounded-md border border-dashed border-ink/20 bg-white p-8 text-center">
+      <h2 className="text-lg font-semibold text-ink">{title}</h2>
+      <p className="mx-auto mt-2 max-w-xl text-sm text-ink/60">{body}</p>
+      <Link className="mt-5 inline-flex h-11 items-center justify-center rounded-md bg-ink px-5 text-sm font-semibold text-white" href={href}>
+        {cta}
+      </Link>
+    </div>
+  );
+}
+
+function AddToCartButton({
+  item,
+  onAdd
+}: {
+  item: CartItem;
+  onAdd: (item: CartItem) => void;
+}) {
+  const [done, setDone] = useState(false);
+  return (
+    <div className="grid gap-2">
+      <Button
+        className="gap-2"
+        onClick={() => {
+          onAdd(item);
+          setDone(true);
+        }}
+      >
+        <ShoppingCart size={18} /> Add to cart
+      </Button>
+      {done ? <p className="text-sm font-medium text-leaf">Added to cart.</p> : null}
+    </div>
+  );
+}
+
+function HomePage() {
+  const categoryIcons = [Coffee, Soup, Package, ShoppingBasket, Utensils];
+
+  return (
+    <main>
+      <section className="relative overflow-hidden bg-ink text-white">
+        <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=1800&q=80')] bg-cover bg-center opacity-35" />
+        <div className="absolute inset-0 bg-gradient-to-r from-ink via-ink/80 to-ink/20" />
+        <div className="relative mx-auto grid min-h-[620px] max-w-7xl content-center gap-8 px-4 py-16">
+          <div className="max-w-3xl">
+            <p className="text-sm font-bold uppercase tracking-[0.22em] text-saffron">Food delivery and grocery marketplace</p>
+            <h1 className="mt-4 text-4xl font-black leading-tight tracking-normal md:text-6xl">
+              Prepared meals, pantry favorites, and local sellers in one checkout.
+            </h1>
+            <p className="mt-5 max-w-2xl text-lg text-white/80">
+              Order restaurant meals and packaged food products while sellers, drivers, and admins manage fulfillment from role-specific dashboards.
+            </p>
+          </div>
+          <form
+            className="flex max-w-2xl flex-col gap-3 rounded-md bg-white p-2 shadow-soft md:flex-row"
+            onSubmit={(event) => {
+              event.preventDefault();
+              navigate("/products");
+            }}
+          >
+            <div className="flex flex-1 items-center gap-2 px-3 text-ink">
+              <Search size={20} />
+              <input className="h-12 flex-1 outline-none" placeholder="Search meals, stores, snacks, drinks..." />
+            </div>
+            <button className="rounded-md bg-leaf px-6 py-3 text-sm font-bold text-white">Search</button>
+          </form>
+          <div className="flex flex-wrap gap-3 text-sm font-semibold text-white/85">
+            <Link href="/restaurants" className="rounded-md border border-white/25 px-4 py-2 backdrop-blur">Order dinner</Link>
+            <Link href="/products" className="rounded-md border border-white/25 px-4 py-2 backdrop-blur">Restock pantry</Link>
+            <Link href="/customer" className="rounded-md border border-white/25 px-4 py-2 backdrop-blur">Track orders</Link>
+          </div>
+        </div>
+      </section>
+
+      <section className="mx-auto grid max-w-7xl gap-6 px-4 py-10 md:grid-cols-3">
+        {[
+          { title: "Restaurants", body: "Browse prepared meals from approved local restaurants.", Icon: Store, href: "/restaurants" },
+          { title: "Packaged Foods", body: "Shop pantry, bakery, snacks, drinks, and seller products.", Icon: Package, href: "/products" },
+          { title: "Live Delivery", body: "Track driver pickup, transit, and delivery states.", Icon: Bike, href: "/orders" }
+        ].map(({ title, body, Icon, href }) => (
+          <Link key={title} href={href} className="rounded-md border border-ink/10 bg-white p-5 shadow-sm transition hover:shadow-soft">
+            <Icon className="text-leaf" />
+            <h2 className="mt-4 text-xl font-black text-ink">{title}</h2>
+            <p className="mt-2 text-sm text-ink/60">{body}</p>
+          </Link>
+        ))}
+      </section>
+
+      <SectionHeader eyebrow="Browse by appetite" title="Food categories" href="/products" cta="Explore marketplace" />
+      <section className="mx-auto grid max-w-7xl gap-3 px-4 pb-8 sm:grid-cols-2 lg:grid-cols-5">
+        {categories.map((category, index) => {
+          const Icon = categoryIcons[index % categoryIcons.length];
+          return (
+            <Link key={category.id} href={category.kind === "meal" ? "/restaurants" : `/products?category=${category.slug}`} className="rounded-md border border-ink/10 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-soft">
+              <span className="grid size-11 place-items-center rounded-md bg-leaf/10 text-leaf"><Icon size={20} /></span>
+              <h3 className="mt-4 font-black text-ink">{category.name}</h3>
+              <p className="mt-1 text-sm text-ink/55">{category.kind === "meal" ? "Prepared meals" : category.kind === "product" ? "Packaged goods" : "Meals and products"}</p>
+            </Link>
+          );
+        })}
+      </section>
+
+      <SectionHeader eyebrow="Open now" title="Popular restaurants" href="/restaurants" cta="View all" />
+      <CardGrid>
+        {restaurants.map((restaurant) => (
+          <ItemCard key={restaurant.id} id={restaurant.id} type="restaurant" name={restaurant.name} description={restaurant.description} imageUrl={restaurant.image_url} meta={`${restaurant.rating} · ${restaurant.delivery_minutes}`} />
+        ))}
+      </CardGrid>
+
+      <section className="mx-auto grid max-w-7xl gap-8 px-4 py-8 lg:grid-cols-2">
+        <div>
+          <SectionHeader compact eyebrow="Ready soon" title="Featured meals" href="/restaurants" cta="Browse food" />
+          <div className="grid gap-5 sm:grid-cols-2">
+            {meals.slice(0, 4).map((meal) => (
+              <ItemCard key={meal.id} id={meal.id} type="meal" name={meal.name} description={meal.description} imageUrl={meal.image_url} priceCents={meal.price_cents} meta={`${meal.prep_minutes} min`} />
+            ))}
+          </div>
+        </div>
+        <div>
+          <SectionHeader compact eyebrow="Pantry picks" title="Featured packaged products" href="/products" cta="Shop products" />
+          <div className="grid gap-5 sm:grid-cols-2">
+            {products.slice(0, 4).map((product) => (
+              <ItemCard key={product.id} id={product.id} type="product" name={product.name} description={product.description} imageUrl={product.image_url} priceCents={product.price_cents} meta={`${product.stock} in stock`} />
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="mx-auto max-w-7xl px-4 py-12">
+        <div className="rounded-md bg-ink p-8 text-white md:flex md:items-center md:justify-between">
+          <div>
+            <p className="text-sm font-bold uppercase tracking-[0.18em] text-saffron">For sellers and restaurants</p>
+            <h2 className="mt-2 text-3xl font-black">Join FreshLane and sell across meals and packaged products.</h2>
+            <p className="mt-2 max-w-2xl text-white/80">Create a restaurant or store profile, list meals and packaged products, and manage fulfillment from your dashboard.</p>
+          </div>
+          <Link className="mt-5 inline-flex h-11 items-center justify-center rounded-md bg-saffron px-5 text-sm font-semibold text-ink hover:bg-white md:mt-0" href="/seller">
+            Start selling
+          </Link>
+        </div>
+      </section>
+    </main>
+  );
+}
+
+function SectionHeader({
+  eyebrow,
+  title,
+  href,
+  cta,
+  compact
+}: {
+  eyebrow: string;
+  title: string;
+  href: string;
+  cta: string;
+  compact?: boolean;
+}) {
+  return (
+    <div className={cn("mx-auto flex max-w-7xl items-end justify-between gap-4 px-4", compact ? "mb-5 px-0" : "mb-5 py-8 pb-0")}>
+      <div>
+        <p className="text-sm font-bold uppercase tracking-[0.18em] text-leaf">{eyebrow}</p>
+        <h2 className={cn("font-black text-ink", compact ? "text-2xl" : "text-3xl")}>{title}</h2>
+      </div>
+      <Link className="inline-flex items-center gap-2 text-sm font-bold text-leaf" href={href}>
+        {cta} <ArrowRight size={16} />
+      </Link>
+    </div>
+  );
+}
+
+function CardGrid({ children }: { children: React.ReactNode }) {
+  return <section className="mx-auto grid max-w-7xl gap-5 px-4 pb-8 sm:grid-cols-2 lg:grid-cols-5">{children}</section>;
+}
+
+function RestaurantsPage() {
+  const [query, setQuery] = useState("");
+  const [cuisine, setCuisine] = useState("");
+  const filtered = restaurants.filter((restaurant) => {
+    const matchesQuery = restaurant.name.toLowerCase().includes(query.toLowerCase());
+    const matchesCuisine = !cuisine || restaurant.cuisine === cuisine;
+    return matchesQuery && matchesCuisine;
+  });
+
+  return (
+    <ListingShell eyebrow="Prepared food" title="Restaurants" body="Find open restaurants and order meals for delivery.">
+      <div className="grid gap-3 rounded-md border border-ink/10 bg-white p-3 md:grid-cols-[1fr_180px]">
+        <Input placeholder="Search restaurants" value={query} onChange={(event) => setQuery(event.target.value)} />
+        <Select value={cuisine} onChange={(event) => setCuisine(event.target.value)}>
+          <option value="">All cuisines</option>
+          {Array.from(new Set(restaurants.map((restaurant) => restaurant.cuisine))).map((value) => <option key={value}>{value}</option>)}
+        </Select>
+      </div>
+      <div className="mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+        {filtered.map((restaurant) => (
+          <ItemCard key={restaurant.id} id={restaurant.id} type="restaurant" name={restaurant.name} description={restaurant.description} imageUrl={restaurant.image_url} meta={`${restaurant.rating} · ${restaurant.delivery_minutes}`} />
+        ))}
+      </div>
+    </ListingShell>
+  );
+}
+
+function ProductsPage() {
+  const [query, setQuery] = useState("");
+  const [category, setCategory] = useState("");
+  const filtered = products.filter((product) => {
+    const matchesQuery = product.name.toLowerCase().includes(query.toLowerCase());
+    const matchesCategory = !category || product.category_slug === category;
+    return matchesQuery && matchesCategory;
+  });
+
+  return (
+    <ListingShell eyebrow="Packaged food" title="Products" body="Shop pantry, bakery, snacks, drinks, and seller inventory.">
+      <div className="grid gap-3 rounded-md border border-ink/10 bg-white p-3 md:grid-cols-[1fr_180px]">
+        <Input placeholder="Search products" value={query} onChange={(event) => setQuery(event.target.value)} />
+        <Select value={category} onChange={(event) => setCategory(event.target.value)}>
+          <option value="">All categories</option>
+          {categories.map((item) => <option key={item.id} value={item.slug}>{item.name}</option>)}
+        </Select>
+      </div>
+      <div className="mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+        {filtered.map((product) => (
+          <ItemCard key={product.id} id={product.id} type="product" name={product.name} description={product.description} imageUrl={product.image_url} priceCents={product.price_cents} meta={`${product.stock} in stock`} />
+        ))}
+      </div>
+    </ListingShell>
+  );
+}
+
+function RestaurantDetailPage({ id }: { id: string }) {
+  const restaurant = restaurants.find((item) => item.id === id);
+  const menu = meals.filter((meal) => meal.restaurant_id === id);
+
+  if (!restaurant) {
+    return <EmptyState title="Restaurant not found" body="That restaurant is no longer available." cta="Browse restaurants" href="/restaurants" />;
+  }
+
+  return (
+    <main>
+      <section className="relative min-h-[380px] overflow-hidden bg-ink text-white">
+        <img src={restaurant.image_url} alt={restaurant.name} className="absolute inset-0 size-full object-cover opacity-45" />
+        <div className="absolute inset-0 bg-gradient-to-r from-ink via-ink/80 to-ink/20" />
+        <div className="relative mx-auto flex min-h-[380px] max-w-7xl flex-col justify-end px-4 py-10">
+          <p className="text-sm font-bold uppercase tracking-[0.18em] text-saffron">{restaurant.cuisine}</p>
+          <h1 className="mt-2 max-w-3xl text-4xl font-black md:text-6xl">{restaurant.name}</h1>
+          <p className="mt-4 max-w-2xl text-white/80">{restaurant.description}</p>
+          <div className="mt-5 flex flex-wrap gap-3 text-sm font-semibold text-white/85">
+            <span className="rounded-md border border-white/25 px-3 py-2">{restaurant.rating} rating</span>
+            <span className="rounded-md border border-white/25 px-3 py-2">{restaurant.delivery_minutes}</span>
+            <span className="rounded-md border border-white/25 px-3 py-2">Open now</span>
+          </div>
+        </div>
+      </section>
+      <section className="mx-auto max-w-7xl px-4 py-10">
+        <div className="flex flex-col justify-between gap-3 md:flex-row md:items-end">
+          <div>
+            <p className="text-sm font-bold uppercase tracking-[0.18em] text-leaf">Menu</p>
+            <h2 className="text-3xl font-black text-ink">Prepared meals</h2>
+          </div>
+          <Link href="/cart" className="inline-flex h-11 items-center justify-center rounded-md bg-ink px-5 text-sm font-semibold text-white">
+            View cart
+          </Link>
+        </div>
+        <div className="mt-6 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+          {menu.map((meal) => (
+            <ItemCard key={meal.id} id={meal.id} type="meal" name={meal.name} description={meal.description} imageUrl={meal.image_url} priceCents={meal.price_cents} meta={`${meal.prep_minutes} min`} />
+          ))}
+        </div>
+      </section>
+    </main>
+  );
+}
+
+function ListingShell({ eyebrow, title, body, children }: { eyebrow: string; title: string; body: string; children: React.ReactNode }) {
+  return (
+    <main className="mx-auto max-w-7xl px-4 py-8">
+      <div>
+        <div>
+          <p className="text-sm font-bold uppercase tracking-[0.18em] text-leaf">{eyebrow}</p>
+          <h1 className="text-4xl font-black text-ink">{title}</h1>
+          <p className="mt-2 text-ink/60">{body}</p>
+        </div>
+      </div>
+      <div className="mt-6">{children}</div>
+    </main>
+  );
+}
+
+function DetailPage({ type, id, addToCart }: { type: "meal" | "product"; id: string; addToCart: (item: CartItem) => void }) {
+  const record = type === "meal" ? meals.find((item) => item.id === id) : products.find((item) => item.id === id);
+  if (!record) return <EmptyState title="Item not found" body="That listing is no longer available." cta="Browse marketplace" href="/products" />;
+
+  const meta = type === "meal" && "prep_minutes" in record ? `${record.prep_minutes} minute prep` : `${"stock" in record ? record.stock : 0} in stock`;
+
+  return (
+    <main className="mx-auto grid max-w-7xl gap-8 px-4 py-10 lg:grid-cols-[1fr_420px]">
+      <div className="relative aspect-[4/3] overflow-hidden rounded-md bg-white shadow-sm">
+        <img src={record.image_url} alt={record.name} className="size-full object-cover" />
+      </div>
+      <section className="grid content-start gap-5 rounded-md border border-ink/10 bg-white p-6 shadow-sm">
+        <p className="text-sm font-bold uppercase tracking-[0.18em] text-leaf">{type === "meal" ? "Prepared meal" : "Packaged food"}</p>
+        <h1 className="text-4xl font-black text-ink">{record.name}</h1>
+        <p className="text-3xl font-black text-tomato">{formatMoney(record.price_cents)}</p>
+        <p className="text-ink/65">{record.description}</p>
+        <p className="inline-flex items-center gap-2 text-sm font-semibold text-ink/60">
+          {type === "meal" ? <Clock size={18} /> : <PackageCheck size={18} />} {meta}
+        </p>
+        <AddToCartButton item={{ id: record.id, type, quantity: 1 }} onAdd={addToCart} />
+      </section>
+    </main>
+  );
+}
+
+function CartPage({ cart, updateQuantity }: { cart: CartItem[]; updateQuantity: (item: CartItem) => void }) {
+  const lines = cart.map((item) => {
+    const record = item.type === "meal" ? meals.find((meal) => meal.id === item.id) : products.find((product) => product.id === item.id);
+    return { ...item, record };
+  }).filter((line) => line.record);
+  const subtotal = lines.reduce((sum, line) => sum + (line.record?.price_cents ?? 0) * line.quantity, 0);
+
+  return (
+    <main className="mx-auto max-w-5xl px-4 py-8">
+      <h1 className="text-4xl font-black text-ink">Cart</h1>
+      {!lines.length ? (
+        <div className="mt-8"><EmptyState title="Your cart is empty" body="Add meals or packaged products before checking out." cta="Browse products" href="/products" /></div>
+      ) : (
+        <div className="mt-8 grid gap-6 lg:grid-cols-[1fr_320px]">
+          <div className="grid gap-3">
+            {lines.map((line) => (
+              <div key={`${line.type}-${line.id}`} className="flex items-center justify-between gap-4 rounded-md border border-ink/10 bg-white p-4 shadow-sm">
+                <div>
+                  <p className="font-semibold text-ink">{line.record?.name}</p>
+                  <p className="text-sm text-ink/55">{line.type} · {formatMoney(line.record?.price_cents ?? 0)}</p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <Input className="w-20" type="number" min={1} value={line.quantity} onChange={(event) => updateQuantity({ id: line.id, type: line.type, quantity: Number(event.target.value) || 1 })} />
+                  <p className="w-24 text-right font-black text-ink">{formatMoney((line.record?.price_cents ?? 0) * line.quantity)}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+          <OrderSummary subtotal={subtotal} />
+        </div>
+      )}
+    </main>
+  );
+}
+
+function OrderSummary({ subtotal }: { subtotal: number }) {
+  const delivery = subtotal > 0 ? 499 : 0;
+  return (
+    <aside className="h-fit rounded-md border border-ink/10 bg-white p-5 shadow-sm">
+      <div className="flex items-center justify-between text-sm text-ink/60"><span>Subtotal</span><span>{formatMoney(subtotal)}</span></div>
+      <div className="mt-3 flex items-center justify-between text-sm text-ink/60"><span>Estimated delivery</span><span>{formatMoney(delivery)}</span></div>
+      <div className="mt-5 flex items-center justify-between border-t border-ink/10 pt-5 text-lg font-black"><span>Total</span><span>{formatMoney(subtotal + delivery)}</span></div>
+      <Link href="/checkout" className="mt-5 inline-flex h-11 w-full items-center justify-center rounded-md bg-ink px-5 text-sm font-semibold text-white">Checkout</Link>
+      <Link href="/products" className="mt-4 block text-center text-sm font-bold text-leaf">Keep shopping</Link>
+    </aside>
+  );
+}
+
+function CheckoutPage({ cart }: { cart: CartItem[] }) {
+  const subtotal = cart.reduce((sum, line) => {
+    const record = line.type === "meal" ? meals.find((item) => item.id === line.id) : products.find((item) => item.id === line.id);
+    return sum + (record?.price_cents ?? 0) * line.quantity;
+  }, 0);
+
+  return (
+    <main className="mx-auto grid max-w-6xl gap-8 px-4 py-8 lg:grid-cols-[1fr_360px]">
+      <section>
+        <h1 className="text-4xl font-black text-ink">Checkout</h1>
+        <p className="mt-2 text-ink/60">Add a delivery address and continue to payment.</p>
+        <form className="mt-6 grid gap-4 rounded-md border border-ink/10 bg-white p-5 shadow-sm">
+        <Field label="Street address"><Input defaultValue="18 Lumley Beach Road" /></Field>
+        <div className="grid gap-4 md:grid-cols-3">
+            <Field label="City"><Input defaultValue="Freetown" /></Field>
+            <Field label="Area"><Input defaultValue="Western Area" /></Field>
+            <Field label="Postcode"><Input defaultValue="00232" /></Field>
+          </div>
+          <Field label="Delivery instructions"><Textarea placeholder="Gate code, dropoff details, allergies, or notes" /></Field>
+          <Button type="button" className="gap-2" onClick={() => navigate("/orders")}>
+            <CreditCard size={18} /> Place demo order
+          </Button>
+        </form>
+      </section>
+      <OrderSummary subtotal={subtotal} />
+    </main>
+  );
+}
+
+function OrdersPage() {
+  return (
+    <main className="mx-auto max-w-5xl px-4 py-8">
+      <h1 className="text-4xl font-black text-ink">Order history</h1>
+      <div className="mt-8 grid gap-3">
+        {orders.map((order) => (
+          <Link key={order.id} href={`/orders/${order.id}`} className="flex flex-col justify-between gap-3 rounded-md border border-ink/10 bg-white p-4 shadow-sm md:flex-row md:items-center">
+            <div><p className="font-black text-ink">Order {order.id}</p><p className="text-sm capitalize text-ink/60">{order.status.replaceAll("_", " ")} · {order.placed_at}</p></div>
+            <p className="text-lg font-black text-ink">{formatMoney(order.total_cents)}</p>
+          </Link>
+        ))}
+      </div>
+    </main>
+  );
+}
+
+function OrderTrackingPage({ id }: { id: string }) {
+  const order = orders.find((item) => item.id === id) ?? orders[0];
+  const statuses = ["pending", "accepted", "preparing", "picked_up", "on_the_way", "delivered"];
+  const current = statuses.indexOf(order.status);
+  return (
+    <main className="mx-auto grid max-w-6xl gap-8 px-4 py-8 lg:grid-cols-[1fr_360px]">
+      <section className="rounded-md border border-ink/10 bg-white p-6 shadow-sm">
+        <p className="text-sm font-bold uppercase tracking-[0.18em] text-leaf">Tracking</p>
+        <h1 className="mt-2 text-3xl font-black text-ink">Order {order.id}</h1>
+        <div className="mt-8 grid gap-4">
+          {statuses.map((status, index) => (
+            <div key={status} className="flex items-center gap-3">
+              <CheckCircle2 className={index <= current ? "text-leaf" : "text-ink/25"} />
+              <span className={index <= current ? "font-bold capitalize text-ink" : "font-semibold capitalize text-ink/40"}>{status.replaceAll("_", " ")}</span>
+            </div>
+          ))}
+        </div>
+      </section>
+      <aside className="h-fit rounded-md border border-ink/10 bg-white p-5 shadow-sm">
+        <h2 className="text-lg font-black text-ink">Items</h2>
+        <div className="mt-4 grid gap-3 text-sm text-ink/65">{order.items.map((item) => <p key={item}>{item}</p>)}</div>
+        <div className="mt-5 flex justify-between border-t border-ink/10 pt-5 text-lg font-black"><span>Total</span><span>{formatMoney(order.total_cents)}</span></div>
+      </aside>
+    </main>
+  );
+}
+
+function DashboardShell({ title, subtitle, nav, children }: { title: string; subtitle: string; nav: string[][]; children: React.ReactNode }) {
+  return (
+    <main className="mx-auto grid max-w-7xl gap-6 px-4 py-8 lg:grid-cols-[240px_1fr]">
+      <aside className="h-fit rounded-md border border-ink/10 bg-white p-3 shadow-sm">
+        <div className="border-b border-ink/10 p-3">
+          <p className="text-xs font-bold uppercase tracking-[0.18em] text-leaf">Dashboard</p>
+          <h1 className="mt-2 text-xl font-black text-ink">{title}</h1>
+          <p className="mt-1 text-sm text-ink/60">{subtitle}</p>
+        </div>
+        <nav className="mt-3 grid gap-1">
+          {nav.map(([href, label]) => <Link key={`${href}-${label}`} href={href} className="rounded-md px-3 py-2 text-sm font-semibold text-ink/70 hover:bg-cloud hover:text-ink">{label}</Link>)}
+        </nav>
+      </aside>
+      <section className="min-w-0">{children}</section>
+    </main>
+  );
+}
+
+function CustomerDashboard() {
+  return (
+    <DashboardShell title="Customer" subtitle={`Welcome back, ${demoUser.full_name}.`} nav={dashboardNav.customer}>
+      <div className="grid gap-6">
+        <Stats cards={[["Active orders", "1", Clock], ["Saved address", "94111", MapPin], ["Recent spend", formatMoney(5534), PackageCheck]]} />
+        <Panel title="Recent orders" actionHref="/orders" action="View orders">
+          {orders.map((order) => <Row key={order.id} left={`Order ${order.id}`} sub={order.status.replaceAll("_", " ")} right={formatMoney(order.total_cents)} href={`/orders/${order.id}`} />)}
+        </Panel>
+      </div>
+    </DashboardShell>
+  );
+}
+
+function SellerDashboard() {
+  const [orderState, setOrderState] = useState("accepted");
+
+  return (
+    <DashboardShell title="Seller" subtitle="Manage stores, listings, and fulfillment." nav={dashboardNav.seller}>
+      <div className="grid gap-6">
+        <Stats cards={[["Approval", "approved", ShieldCheck], ["Restaurants", "5", Store], ["Listings", "25", Package], ["Incoming orders", "8", Clock]]} />
+        <section className="grid gap-6 lg:grid-cols-2">
+          <form className="grid gap-4 rounded-md border border-ink/10 bg-white p-5 shadow-sm">
+            <h2 className="text-xl font-black text-ink">Create restaurant/store profile</h2>
+            <Field label="Business name"><Input defaultValue="Freetown Food Group" /></Field>
+            <Field label="Cuisine or store category"><Input defaultValue="West African kitchen" /></Field>
+            <Field label="Address"><Input defaultValue="18 Lumley Beach Road, Freetown" /></Field>
+            <Button type="button">Save profile</Button>
+          </form>
+          <form className="grid gap-4 rounded-md border border-ink/10 bg-white p-5 shadow-sm">
+            <h2 className="text-xl font-black text-ink">Add meal or packaged product</h2>
+            <div className="grid gap-4 md:grid-cols-2">
+              <Field label="Type"><Select><option>Meal</option><option>Packaged product</option></Select></Field>
+              <Field label="Price"><Input defaultValue="14.95" /></Field>
+            </div>
+            <Field label="Name"><Input defaultValue="Cassava leaf stew bowl" /></Field>
+            <Field label="Stock / availability"><Input defaultValue="Available today" /></Field>
+            <Button type="button">Add listing</Button>
+          </form>
+        </section>
+        <Panel title="Incoming order controls">
+          {orders.map((order) => (
+            <div key={order.id} className="grid gap-3 rounded-md bg-cloud p-3 md:grid-cols-[1fr_180px_auto] md:items-center">
+              <span><strong className="text-ink">Order {order.id}</strong><span className="mt-1 block text-sm text-ink/60">{order.items.join(", ")}</span></span>
+              <Select value={orderState} onChange={(event) => setOrderState(event.target.value)}>
+                <option value="accepted">accepted</option>
+                <option value="rejected">rejected</option>
+                <option value="preparing">preparing</option>
+                <option value="ready">ready</option>
+              </Select>
+              <Button type="button">Update</Button>
+            </div>
+          ))}
+        </Panel>
+        <section className="grid gap-6 lg:grid-cols-2">
+          <Panel title="Meals">{meals.slice(0, 4).map((meal) => <Row key={meal.id} left={meal.name} sub={`${meal.prep_minutes} min`} right={formatMoney(meal.price_cents)} href={`/meals/${meal.id}`} />)}</Panel>
+          <Panel title="Packaged products">{products.slice(0, 4).map((product) => <Row key={product.id} left={product.name} sub={`${product.stock} in stock`} right={formatMoney(product.price_cents)} href={`/products/${product.id}`} />)}</Panel>
+        </section>
+      </div>
+    </DashboardShell>
+  );
+}
+
+function DriverDashboard() {
+  const [deliveryStatus, setDeliveryStatus] = useState("accepted");
+
+  return (
+    <DashboardShell title="Driver" subtitle="Accept assigned deliveries and update progress." nav={dashboardNav.driver}>
+      <Panel title="Assigned deliveries">
+        {orders.map((order) => (
+          <div key={order.id} className="grid gap-3 rounded-md bg-cloud p-3 md:grid-cols-[1fr_180px_auto] md:items-center">
+            <span><strong className="text-ink">Delivery {order.id}</strong><span className="mt-1 block text-sm capitalize text-ink/60">{order.status.replaceAll("_", " ")}</span></span>
+            <Select value={deliveryStatus} onChange={(event) => setDeliveryStatus(event.target.value)}>
+              <option value="accepted">accepted</option>
+              <option value="picked_up">picked up</option>
+              <option value="on_the_way">on the way</option>
+              <option value="delivered">delivered</option>
+            </Select>
+            <Button type="button">Update</Button>
+          </div>
+        ))}
+      </Panel>
+    </DashboardShell>
+  );
+}
+
+function AdminDashboard() {
+  const [sellerStatus, setSellerStatus] = useState("approved");
+
+  return (
+    <DashboardShell title="Admin" subtitle="Manage users, sellers, listings, categories, revenue, and commission." nav={dashboardNav.admin}>
+      <div className="grid gap-6">
+        <Stats cards={[["Orders", "24", ShoppingCart], ["Revenue", formatMoney(128940), CreditCard], ["Commission", formatMoney(15472), ShieldCheck], ["Categories", "5", Package]]} />
+        <section className="grid gap-6 lg:grid-cols-2">
+          <Panel title="Seller approvals">
+            {restaurants.slice(0, 4).map((restaurant) => (
+              <div key={restaurant.id} className="grid gap-3 rounded-md bg-cloud p-3 md:grid-cols-[1fr_160px_auto] md:items-center">
+                <span><strong className="text-ink">{restaurant.name}</strong><span className="mt-1 block text-sm text-ink/60">{restaurant.cuisine}</span></span>
+                <Select value={sellerStatus} onChange={(event) => setSellerStatus(event.target.value)}>
+                  <option value="approved">approved</option>
+                  <option value="rejected">rejected</option>
+                  <option value="suspended">suspended</option>
+                </Select>
+                <Button type="button">Save</Button>
+              </div>
+            ))}
+          </Panel>
+          <Panel title="Customers and drivers">{["Aminata Kamara - customer", "Kadiatu Conteh - seller", "Ibrahim Sesay - driver", "Admin User - admin"].map((name) => <Row key={name} left={name} sub="Active profile" right="Manage" href="/admin" />)}</Panel>
+        </section>
+        <Panel title="Categories">
+          <form className="grid gap-3 md:grid-cols-[1fr_180px_auto]">
+            <Input placeholder="Category name" defaultValue="Prepared meals" />
+            <Select defaultValue="meal"><option value="meal">Meals</option><option value="product">Products</option><option value="">Both</option></Select>
+            <Button type="button" className="gap-2"><SlidersHorizontal size={16} /> Add</Button>
+          </form>
+          <div className="flex flex-wrap gap-2">
+            {categories.map((category) => <span key={category.id} className="rounded-md bg-cloud px-3 py-2 text-sm font-semibold text-ink/70">{category.name}</span>)}
+          </div>
+        </Panel>
+      </div>
+    </DashboardShell>
+  );
+}
+
+function Stats({ cards }: { cards: [string, string, React.ComponentType<{ className?: string }>][] }) {
+  return (
+    <section className="grid gap-4 md:grid-cols-4">
+      {cards.map(([label, value, Icon]) => (
+        <div key={label} className="rounded-md border border-ink/10 bg-white p-5 shadow-sm">
+          <Icon className="text-leaf" />
+          <p className="mt-4 text-sm font-semibold text-ink/55">{label}</p>
+          <p className="mt-1 text-2xl font-black capitalize text-ink">{value}</p>
+        </div>
+      ))}
+    </section>
+  );
+}
+
+function Panel({ title, actionHref, action, children }: { title: string; actionHref?: string; action?: string; children: React.ReactNode }) {
+  return (
+    <section className="rounded-md border border-ink/10 bg-white p-5 shadow-sm">
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="text-xl font-black text-ink">{title}</h2>
+        {actionHref && action ? <Link className="text-sm font-bold text-leaf" href={actionHref}>{action}</Link> : null}
+      </div>
+      <div className="mt-4 grid gap-3">{children}</div>
+    </section>
+  );
+}
+
+function Row({ left, sub, right, href }: { left: string; sub: string; right: string; href: string }) {
+  return (
+    <Link href={href} className="flex flex-col justify-between gap-2 rounded-md bg-cloud p-3 md:flex-row md:items-center">
+      <span><strong className="text-ink">{left}</strong><span className="mt-1 block text-sm capitalize text-ink/60">{sub}</span></span>
+      <span className="font-black text-ink">{right}</span>
+    </Link>
+  );
+}
+
+export default function App() {
+  const path = usePath();
+  const [cart, setCart] = useState<CartItem[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem("freshlane-cart") ?? "[]") as CartItem[];
+    } catch {
+      return [];
+    }
+  });
+
+  useEffect(() => {
+    localStorage.setItem("freshlane-cart", JSON.stringify(cart));
+  }, [cart]);
+
+  const addToCart = (item: CartItem) => {
+    setCart((current) => {
+      const existing = current.find((line) => line.id === item.id && line.type === item.type);
+      if (existing) {
+        return current.map((line) => line === existing ? { ...line, quantity: line.quantity + item.quantity } : line);
+      }
+      return [...current, item];
+    });
+  };
+
+  const updateQuantity = (item: CartItem) => {
+    setCart((current) => current.map((line) => line.id === item.id && line.type === item.type ? { ...line, quantity: item.quantity } : line));
+  };
+
+  const page = useMemo(() => {
+    if (path === "/") return <HomePage />;
+    if (path === "/login") return <AuthPage mode="login" />;
+    if (path === "/signup") return <AuthPage mode="signup" />;
+    if (path === "/restaurants") return <RestaurantsPage />;
+    if (path.startsWith("/restaurants/")) return <RestaurantDetailPage id={path.split("/").pop() ?? ""} />;
+    if (path === "/products") return <ProductsPage />;
+    if (path.startsWith("/meals/")) return <DetailPage type="meal" id={path.split("/").pop() ?? ""} addToCart={addToCart} />;
+    if (path.startsWith("/products/")) return <DetailPage type="product" id={path.split("/").pop() ?? ""} addToCart={addToCart} />;
+    if (path === "/cart") return <CartPage cart={cart} updateQuantity={updateQuantity} />;
+    if (path === "/checkout") return <CheckoutPage cart={cart} />;
+    if (path === "/orders") return <OrdersPage />;
+    if (path.startsWith("/orders/")) return <OrderTrackingPage id={path.split("/").pop() ?? ""} />;
+    if (path === "/customer") return <CustomerDashboard />;
+    if (path === "/seller") return <SellerDashboard />;
+    if (path === "/driver") return <DriverDashboard />;
+    if (path === "/admin") return <AdminDashboard />;
+    return <EmptyState title="Page not found" body="That route is not available in the Vite app." cta="Go home" href="/" />;
+  }, [cart, path]);
+
+  return (
+    <>
+      <Navigation />
+      {page}
+    </>
+  );
+}
