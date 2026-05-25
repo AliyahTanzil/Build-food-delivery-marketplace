@@ -22,7 +22,8 @@ import {
   Store,
   Utensils
 } from "lucide-react";
-import { categories, demoUser, meals, orders, products, restaurants } from "@/vite/data";
+import { categories, demoUser, meals, orders, products as initialProducts, restaurants } from "@/vite/data";
+import type { DemoProduct } from "@/vite/data";
 import { cn, formatMoney } from "@/lib/utils";
 
 type CartItem = {
@@ -328,7 +329,7 @@ function AddToCartButton({
   );
 }
 
-function HomePage() {
+function HomePage({ productCatalog }: { productCatalog: DemoProduct[] }) {
   const categoryIcons = [Coffee, Soup, Package, ShoppingBasket, Utensils];
 
   return (
@@ -414,7 +415,7 @@ function HomePage() {
         <div>
           <SectionHeader compact eyebrow="Pantry picks" title="Featured packaged products" href="/products" cta="Shop products" />
           <div className="grid gap-5 sm:grid-cols-2">
-            {products.slice(0, 4).map((product) => (
+            {productCatalog.slice(0, 4).map((product) => (
               <ItemCard key={product.id} id={product.id} type="product" name={product.name} description={product.description} imageUrl={product.image_url} priceCents={product.price_cents} meta={`${product.stock} in stock`} />
             ))}
           </div>
@@ -494,10 +495,10 @@ function RestaurantsPage() {
   );
 }
 
-function ProductsPage() {
+function ProductsPage({ productCatalog }: { productCatalog: DemoProduct[] }) {
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("");
-  const filtered = products.filter((product) => {
+  const filtered = productCatalog.filter((product) => {
     const matchesQuery = product.name.toLowerCase().includes(query.toLowerCase());
     const matchesCategory = !category || product.category_slug === category;
     return matchesQuery && matchesCategory;
@@ -580,8 +581,8 @@ function ListingShell({ eyebrow, title, body, children }: { eyebrow: string; tit
   );
 }
 
-function DetailPage({ type, id, addToCart }: { type: "meal" | "product"; id: string; addToCart: (item: CartItem) => void }) {
-  const record = type === "meal" ? meals.find((item) => item.id === id) : products.find((item) => item.id === id);
+function DetailPage({ type, id, addToCart, productCatalog }: { type: "meal" | "product"; id: string; addToCart: (item: CartItem) => void; productCatalog: DemoProduct[] }) {
+  const record = type === "meal" ? meals.find((item) => item.id === id) : productCatalog.find((item) => item.id === id);
   if (!record) return <EmptyState title="Item not found" body="That listing is no longer available." cta="Browse marketplace" href="/products" />;
 
   const meta = type === "meal" && "prep_minutes" in record ? `${record.prep_minutes} minute prep` : `${"stock" in record ? record.stock : 0} in stock`;
@@ -605,9 +606,9 @@ function DetailPage({ type, id, addToCart }: { type: "meal" | "product"; id: str
   );
 }
 
-function CartPage({ cart, updateQuantity }: { cart: CartItem[]; updateQuantity: (item: CartItem) => void }) {
+function CartPage({ cart, updateQuantity, productCatalog }: { cart: CartItem[]; updateQuantity: (item: CartItem) => void; productCatalog: DemoProduct[] }) {
   const lines = cart.map((item) => {
-    const record = item.type === "meal" ? meals.find((meal) => meal.id === item.id) : products.find((product) => product.id === item.id);
+    const record = item.type === "meal" ? meals.find((meal) => meal.id === item.id) : productCatalog.find((product) => product.id === item.id);
     return { ...item, record };
   }).filter((line) => line.record);
   const subtotal = lines.reduce((sum, line) => sum + (line.record?.price_cents ?? 0) * line.quantity, 0);
@@ -653,9 +654,9 @@ function OrderSummary({ subtotal }: { subtotal: number }) {
   );
 }
 
-function CheckoutPage({ cart }: { cart: CartItem[] }) {
+function CheckoutPage({ cart, productCatalog }: { cart: CartItem[]; productCatalog: DemoProduct[] }) {
   const subtotal = cart.reduce((sum, line) => {
-    const record = line.type === "meal" ? meals.find((item) => item.id === line.id) : products.find((item) => item.id === line.id);
+    const record = line.type === "meal" ? meals.find((item) => item.id === line.id) : productCatalog.find((item) => item.id === line.id);
     return sum + (record?.price_cents ?? 0) * line.quantity;
   }, 0);
 
@@ -756,8 +757,25 @@ function CustomerDashboard() {
   );
 }
 
-function SellerDashboard() {
+function SellerDashboard({
+  productCatalog,
+  addProduct,
+  updateProduct
+}: {
+  productCatalog: DemoProduct[];
+  addProduct: (product: DemoProduct) => void;
+  updateProduct: (id: string, updates: Partial<DemoProduct>) => void;
+}) {
   const [orderState, setOrderState] = useState("accepted");
+  const [newProduct, setNewProduct] = useState<DemoProduct>({
+    id: "new-product",
+    category_slug: "pantry",
+    name: "Cassava leaf stew bowl",
+    description: "Fresh African pantry or ready meal listing.",
+    image_url: "https://images.unsplash.com/photo-1604329760661-e71dc83f8f26?auto=format&fit=crop&w=1200&q=80",
+    price_cents: 1450,
+    stock: 20
+  });
 
   return (
     <DashboardShell title="Seller" subtitle="Manage stores, listings, and fulfillment." nav={dashboardNav.seller}>
@@ -771,17 +789,38 @@ function SellerDashboard() {
             <Field label="Address"><Input defaultValue="18 Lumley Beach Road, Freetown" /></Field>
             <Button type="button">Save profile</Button>
           </form>
-          <form className="grid gap-4 rounded-md border border-ink/10 bg-white p-5 shadow-sm">
+          <form
+            className="grid gap-4 rounded-md border border-ink/10 bg-white p-5 shadow-sm"
+            onSubmit={(event) => {
+              event.preventDefault();
+              const id = newProduct.name.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)+/g, "") || `product-${Date.now()}`;
+              addProduct({ ...newProduct, id });
+              setNewProduct({ ...newProduct, id: "new-product", name: "", description: "", stock: 10, price_cents: 1000 });
+            }}
+          >
             <h2 className="text-xl font-black text-ink">Add meal or packaged product</h2>
             <div className="grid gap-4 md:grid-cols-2">
-              <Field label="Type"><Select><option>Meal</option><option>Packaged product</option></Select></Field>
-              <Field label="Price"><Input defaultValue="14.95" /></Field>
+              <Field label="Category">
+                <Select value={newProduct.category_slug} onChange={(event) => setNewProduct((product) => ({ ...product, category_slug: event.target.value }))}>
+                  {categories.map((category) => <option key={category.id} value={category.slug}>{category.name}</option>)}
+                </Select>
+              </Field>
+              <Field label="Price">
+                <Input type="number" min={0} step="0.01" value={(newProduct.price_cents / 100).toFixed(2)} onChange={(event) => setNewProduct((product) => ({ ...product, price_cents: Math.round(Number(event.target.value || 0) * 100) }))} />
+              </Field>
             </div>
-            <Field label="Name"><Input defaultValue="Cassava leaf stew bowl" /></Field>
-            <Field label="Stock / availability"><Input defaultValue="Available today" /></Field>
-            <Button type="button">Add listing</Button>
+            <Field label="Name"><Input value={newProduct.name} onChange={(event) => setNewProduct((product) => ({ ...product, name: event.target.value }))} /></Field>
+            <Field label="Image URL"><Input value={newProduct.image_url} onChange={(event) => setNewProduct((product) => ({ ...product, image_url: event.target.value }))} /></Field>
+            <Field label="Description"><Textarea value={newProduct.description} onChange={(event) => setNewProduct((product) => ({ ...product, description: event.target.value }))} /></Field>
+            <Field label="Stock"><Input type="number" min={0} value={newProduct.stock} onChange={(event) => setNewProduct((product) => ({ ...product, stock: Number(event.target.value || 0) }))} /></Field>
+            <Button>Add listing</Button>
           </form>
         </section>
+        <Panel title="Edit marketplace products">
+          {productCatalog.map((product) => (
+            <ProductEditor key={product.id} product={product} updateProduct={updateProduct} />
+          ))}
+        </Panel>
         <Panel title="Incoming order controls">
           {orders.map((order) => (
             <div key={order.id} className="grid gap-3 rounded-md bg-cloud p-3 md:grid-cols-[1fr_180px_auto] md:items-center">
@@ -798,10 +837,54 @@ function SellerDashboard() {
         </Panel>
         <section className="grid gap-6 lg:grid-cols-2">
           <Panel title="Meals">{meals.slice(0, 4).map((meal) => <Row key={meal.id} left={meal.name} sub={`${meal.prep_minutes} min`} right={formatMoney(meal.price_cents)} href={`/meals/${meal.id}`} />)}</Panel>
-          <Panel title="Packaged products">{products.slice(0, 4).map((product) => <Row key={product.id} left={product.name} sub={`${product.stock} in stock`} right={formatMoney(product.price_cents)} href={`/products/${product.id}`} />)}</Panel>
+          <Panel title="Packaged products">{productCatalog.slice(0, 4).map((product) => <Row key={product.id} left={product.name} sub={`${product.stock} in stock`} right={formatMoney(product.price_cents)} href={`/products/${product.id}`} />)}</Panel>
         </section>
       </div>
     </DashboardShell>
+  );
+}
+
+function ProductEditor({
+  product,
+  updateProduct
+}: {
+  product: DemoProduct;
+  updateProduct: (id: string, updates: Partial<DemoProduct>) => void;
+}) {
+  return (
+    <div className="grid gap-4 rounded-md bg-cloud p-4 lg:grid-cols-[120px_1fr]">
+      <img src={product.image_url} alt={product.name} className="aspect-square w-full rounded-md object-cover" />
+      <div className="grid gap-3">
+        <div className="grid gap-3 md:grid-cols-2">
+          <Field label="Product name">
+            <Input value={product.name} onChange={(event) => updateProduct(product.id, { name: event.target.value })} />
+          </Field>
+          <Field label="Price">
+            <Input type="number" min={0} step="0.01" value={(product.price_cents / 100).toFixed(2)} onChange={(event) => updateProduct(product.id, { price_cents: Math.round(Number(event.target.value || 0) * 100) })} />
+          </Field>
+        </div>
+        <Field label="Image URL">
+          <Input value={product.image_url} onChange={(event) => updateProduct(product.id, { image_url: event.target.value })} />
+        </Field>
+        <Field label="Description">
+          <Textarea value={product.description} onChange={(event) => updateProduct(product.id, { description: event.target.value })} />
+        </Field>
+        <div className="grid gap-3 md:grid-cols-2">
+          <Field label="Category">
+            <Select value={product.category_slug} onChange={(event) => updateProduct(product.id, { category_slug: event.target.value })}>
+              {categories.map((category) => <option key={category.id} value={category.slug}>{category.name}</option>)}
+            </Select>
+          </Field>
+          <Field label="Stock">
+            <Input type="number" min={0} value={product.stock} onChange={(event) => updateProduct(product.id, { stock: Number(event.target.value || 0) })} />
+          </Field>
+        </div>
+        <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-ink/60">
+          <span>Route: /products/{product.id}</span>
+          <Link href={`/products/${product.id}`} className="font-bold text-leaf">Preview listing</Link>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -903,6 +986,13 @@ function Row({ left, sub, right, href }: { left: string; sub: string; right: str
 
 export default function App() {
   const path = usePath();
+  const [productCatalog, setProductCatalog] = useState<DemoProduct[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem("freshlane-products") ?? "null") as DemoProduct[] || initialProducts;
+    } catch {
+      return initialProducts;
+    }
+  });
   const [cart, setCart] = useState<CartItem[]>(() => {
     try {
       return JSON.parse(localStorage.getItem("freshlane-cart") ?? "[]") as CartItem[];
@@ -914,6 +1004,10 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem("freshlane-cart", JSON.stringify(cart));
   }, [cart]);
+
+  useEffect(() => {
+    localStorage.setItem("freshlane-products", JSON.stringify(productCatalog));
+  }, [productCatalog]);
 
   const addToCart = (item: CartItem) => {
     setCart((current) => {
@@ -929,25 +1023,36 @@ export default function App() {
     setCart((current) => current.map((line) => line.id === item.id && line.type === item.type ? { ...line, quantity: item.quantity } : line));
   };
 
+  const addProduct = (product: DemoProduct) => {
+    setProductCatalog((current) => {
+      const exists = current.some((item) => item.id === product.id);
+      return exists ? current.map((item) => item.id === product.id ? product : item) : [product, ...current];
+    });
+  };
+
+  const updateProduct = (id: string, updates: Partial<DemoProduct>) => {
+    setProductCatalog((current) => current.map((product) => product.id === id ? { ...product, ...updates } : product));
+  };
+
   const page = useMemo(() => {
-    if (path === "/") return <HomePage />;
+    if (path === "/") return <HomePage productCatalog={productCatalog} />;
     if (path === "/login") return <AuthPage mode="login" />;
     if (path === "/signup") return <AuthPage mode="signup" />;
     if (path === "/restaurants") return <RestaurantsPage />;
     if (path.startsWith("/restaurants/")) return <RestaurantDetailPage id={path.split("/").pop() ?? ""} />;
-    if (path === "/products") return <ProductsPage />;
-    if (path.startsWith("/meals/")) return <DetailPage type="meal" id={path.split("/").pop() ?? ""} addToCart={addToCart} />;
-    if (path.startsWith("/products/")) return <DetailPage type="product" id={path.split("/").pop() ?? ""} addToCart={addToCart} />;
-    if (path === "/cart") return <CartPage cart={cart} updateQuantity={updateQuantity} />;
-    if (path === "/checkout") return <CheckoutPage cart={cart} />;
+    if (path === "/products") return <ProductsPage productCatalog={productCatalog} />;
+    if (path.startsWith("/meals/")) return <DetailPage type="meal" id={path.split("/").pop() ?? ""} addToCart={addToCart} productCatalog={productCatalog} />;
+    if (path.startsWith("/products/")) return <DetailPage type="product" id={path.split("/").pop() ?? ""} addToCart={addToCart} productCatalog={productCatalog} />;
+    if (path === "/cart") return <CartPage cart={cart} updateQuantity={updateQuantity} productCatalog={productCatalog} />;
+    if (path === "/checkout") return <CheckoutPage cart={cart} productCatalog={productCatalog} />;
     if (path === "/orders") return <OrdersPage />;
     if (path.startsWith("/orders/")) return <OrderTrackingPage id={path.split("/").pop() ?? ""} />;
     if (path === "/customer") return <CustomerDashboard />;
-    if (path === "/seller") return <SellerDashboard />;
+    if (path === "/seller") return <SellerDashboard productCatalog={productCatalog} addProduct={addProduct} updateProduct={updateProduct} />;
     if (path === "/driver") return <DriverDashboard />;
     if (path === "/admin") return <AdminDashboard />;
     return <EmptyState title="Page not found" body="That route is not available in the Vite app." cta="Go home" href="/" />;
-  }, [cart, path]);
+  }, [cart, path, productCatalog]);
 
   return (
     <>
