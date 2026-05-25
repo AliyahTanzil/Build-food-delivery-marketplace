@@ -40,9 +40,11 @@ type AuthUser = {
   email: string;
   password: string;
   role: Role;
-  status: "active" | "pending" | "disabled";
+  status: AuthStatus;
   address: string;
 };
+
+type AuthStatus = "active" | "pending" | "disabled";
 
 const authUsersKey = "freshlane-auth-users";
 const activeUserKey = "freshlane-active-user";
@@ -1109,8 +1111,40 @@ function DriverDashboard({ currentUser }: { currentUser: AuthUser }) {
   );
 }
 
-function AdminDashboard({ currentUser }: { currentUser: AuthUser }) {
+function AdminDashboard({
+  currentUser,
+  users,
+  addUser,
+  updateUser,
+  deleteUser
+}: {
+  currentUser: AuthUser;
+  users: AuthUser[];
+  addUser: (user: Omit<AuthUser, "id">) => { ok: true; user: AuthUser } | { ok: false; message: string };
+  updateUser: (id: string, updates: Partial<AuthUser>) => void;
+  deleteUser: (id: string) => void;
+}) {
   const [sellerStatus, setSellerStatus] = useState("approved");
+  const [selectedUserId, setSelectedUserId] = useState(users[0]?.id ?? "");
+  const [message, setMessage] = useState("");
+  const [newUser, setNewUser] = useState<Omit<AuthUser, "id">>({
+    full_name: "",
+    email: "",
+    password: "DemoPass123!",
+    role: "customer",
+    status: "active",
+    address: "New delivery address"
+  });
+  const selectedUser = users.find((user) => user.id === selectedUserId) ?? users[0];
+
+  useEffect(() => {
+    if (!selectedUserId && users[0]) {
+      setSelectedUserId(users[0].id);
+    }
+    if (selectedUserId && !users.some((user) => user.id === selectedUserId)) {
+      setSelectedUserId(users[0]?.id ?? "");
+    }
+  }, [selectedUserId, users]);
 
   return (
     <DashboardShell title="Admin" subtitle={`${currentUser.full_name}, manage users, sellers, listings, categories, revenue, and commission.`} nav={dashboardNav.admin}>
@@ -1130,7 +1164,128 @@ function AdminDashboard({ currentUser }: { currentUser: AuthUser }) {
               </div>
             ))}
           </Panel>
-          <Panel title="Customers and drivers">{["Aminata Kamara - customer", "Kadiatu Conteh - seller", "Ibrahim Sesay - driver", "Admin User - admin"].map((name) => <Row key={name} left={name} sub="Active profile" right="Manage" href="/admin" />)}</Panel>
+          <Panel title="Manage users">
+            <form
+              className="grid gap-3 rounded-md bg-cloud p-3"
+              onSubmit={(event) => {
+                event.preventDefault();
+                setMessage("");
+                const result = addUser(newUser);
+                if (!result.ok) {
+                  setMessage(result.message);
+                  return;
+                }
+                setSelectedUserId(result.user.id);
+                setNewUser({
+                  full_name: "",
+                  email: "",
+                  password: "DemoPass123!",
+                  role: "customer",
+                  status: "active",
+                  address: "New delivery address"
+                });
+                setMessage(`${result.user.full_name} was created.`);
+              }}
+            >
+              <div className="grid gap-3 md:grid-cols-2">
+                <Field label="Full name">
+                  <Input required value={newUser.full_name} onChange={(event) => setNewUser((user) => ({ ...user, full_name: event.target.value }))} />
+                </Field>
+                <Field label="Email">
+                  <Input required type="email" value={newUser.email} onChange={(event) => setNewUser((user) => ({ ...user, email: event.target.value }))} />
+                </Field>
+              </div>
+              <div className="grid gap-3 md:grid-cols-3">
+                <Field label="Role">
+                  <Select value={newUser.role} onChange={(event) => setNewUser((user) => ({ ...user, role: event.target.value as Role }))}>
+                    <option value="customer">Customer</option>
+                    <option value="seller">Seller</option>
+                    <option value="driver">Driver</option>
+                    <option value="admin">Admin</option>
+                  </Select>
+                </Field>
+                <Field label="Status">
+                  <Select value={newUser.status} onChange={(event) => setNewUser((user) => ({ ...user, status: event.target.value as AuthStatus }))}>
+                    <option value="active">Active</option>
+                    <option value="pending">Pending</option>
+                    <option value="disabled">Disabled</option>
+                  </Select>
+                </Field>
+                <Field label="Password">
+                  <Input required value={newUser.password} onChange={(event) => setNewUser((user) => ({ ...user, password: event.target.value }))} />
+                </Field>
+              </div>
+              <Button type="submit">Create user</Button>
+            </form>
+            {message ? <p className="rounded-md bg-leaf/10 px-3 py-2 text-sm font-semibold text-leaf">{message}</p> : null}
+            <div className="grid gap-2">
+              {users.map((user) => (
+                <div key={user.id} className="grid gap-3 rounded-md bg-cloud p-3 md:grid-cols-[1fr_110px_auto] md:items-center">
+                  <span>
+                    <strong className="text-ink">{user.full_name}</strong>
+                    <span className="mt-1 block text-sm text-ink/60">{user.email} · {user.role} · {user.status}</span>
+                  </span>
+                  <span className={cn("rounded-md px-2 py-1 text-center text-xs font-black capitalize", user.status === "active" ? "bg-leaf/15 text-leaf" : user.status === "pending" ? "bg-saffron/30 text-ink" : "bg-tomato/10 text-tomato")}>
+                    {user.status}
+                  </span>
+                  <Button type="button" className="h-10 px-4" onClick={() => setSelectedUserId(user.id)}>Manage</Button>
+                </div>
+              ))}
+            </div>
+            {selectedUser ? (
+              <div className="grid gap-3 rounded-md border border-ink/10 bg-white p-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <h3 className="text-lg font-black text-ink">Editing {selectedUser.full_name}</h3>
+                    <p className="text-sm text-ink/60">Changes save immediately to the local user store.</p>
+                  </div>
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-1 text-sm font-bold text-tomato disabled:cursor-not-allowed disabled:opacity-40"
+                    disabled={selectedUser.id === currentUser.id}
+                    onClick={() => {
+                      if (window.confirm(`Delete ${selectedUser.full_name}?`)) {
+                        deleteUser(selectedUser.id);
+                      }
+                    }}
+                  >
+                    <Trash2 size={15} /> Delete user
+                  </button>
+                </div>
+                <div className="grid gap-3 md:grid-cols-2">
+                  <Field label="Full name">
+                    <Input value={selectedUser.full_name} onChange={(event) => updateUser(selectedUser.id, { full_name: event.target.value })} />
+                  </Field>
+                  <Field label="Email">
+                    <Input type="email" value={selectedUser.email} onChange={(event) => updateUser(selectedUser.id, { email: event.target.value.trim().toLowerCase() })} />
+                  </Field>
+                </div>
+                <Field label="Address">
+                  <Input value={selectedUser.address} onChange={(event) => updateUser(selectedUser.id, { address: event.target.value })} />
+                </Field>
+                <div className="grid gap-3 md:grid-cols-3">
+                  <Field label="Role">
+                    <Select value={selectedUser.role} disabled={selectedUser.id === currentUser.id} onChange={(event) => updateUser(selectedUser.id, { role: event.target.value as Role })}>
+                      <option value="customer">Customer</option>
+                      <option value="seller">Seller</option>
+                      <option value="driver">Driver</option>
+                      <option value="admin">Admin</option>
+                    </Select>
+                  </Field>
+                  <Field label="Status">
+                    <Select value={selectedUser.status} disabled={selectedUser.id === currentUser.id} onChange={(event) => updateUser(selectedUser.id, { status: event.target.value as AuthStatus })}>
+                      <option value="active">Active</option>
+                      <option value="pending">Pending</option>
+                      <option value="disabled">Disabled</option>
+                    </Select>
+                  </Field>
+                  <Field label="Password">
+                    <Input value={selectedUser.password} onChange={(event) => updateUser(selectedUser.id, { password: event.target.value })} />
+                  </Field>
+                </div>
+              </div>
+            ) : null}
+          </Panel>
         </section>
         <Panel title="Categories">
           <form className="grid gap-3 md:grid-cols-[1fr_180px_auto]">
@@ -1298,6 +1453,45 @@ export default function App() {
     return { ok: true as const, user: createdUser };
   };
 
+  const addUser = (user: Omit<AuthUser, "id">) => {
+    const normalizedEmail = user.email.trim().toLowerCase();
+
+    if (users.some((item) => item.email.toLowerCase() === normalizedEmail)) {
+      return { ok: false as const, message: "An account with this email already exists." };
+    }
+
+    const createdUser: AuthUser = {
+      ...user,
+      id: `${user.role}-${Date.now()}`,
+      email: normalizedEmail,
+      full_name: user.full_name.trim()
+    };
+
+    setUsers((current) => [createdUser, ...current]);
+    return { ok: true as const, user: createdUser };
+  };
+
+  const updateUser = (id: string, updates: Partial<AuthUser>) => {
+    setUsers((current) => current.map((user) => {
+      if (user.id !== id) return user;
+
+      const next = { ...user, ...updates };
+      if (id === currentUserId) {
+        next.role = user.role;
+        next.status = user.status;
+      }
+
+      next.email = next.email.trim().toLowerCase();
+      next.full_name = next.full_name.trim();
+      return next;
+    }));
+  };
+
+  const deleteUser = (id: string) => {
+    if (id === currentUserId) return;
+    setUsers((current) => current.filter((user) => user.id !== id));
+  };
+
   const logout = () => {
     setCurrentUserId(null);
     navigate("/login");
@@ -1329,7 +1523,7 @@ export default function App() {
     if (path === "/customer" && currentUser) return <CustomerDashboard currentUser={currentUser} />;
     if (path === "/seller" && currentUser) return <SellerDashboard currentUser={currentUser} productCatalog={productCatalog} addProduct={addProduct} updateProduct={updateProduct} deleteProduct={deleteProduct} />;
     if (path === "/driver" && currentUser) return <DriverDashboard currentUser={currentUser} />;
-    if (path === "/admin" && currentUser) return <AdminDashboard currentUser={currentUser} />;
+    if (path === "/admin" && currentUser) return <AdminDashboard currentUser={currentUser} users={users} addUser={addUser} updateUser={updateUser} deleteUser={deleteUser} />;
     return <EmptyState title="Page not found" body="That route is not available in the Vite app." cta="Go home" href="/" />;
   }, [cart, currentUser, path, productCatalog, users]);
 
