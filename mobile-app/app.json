@@ -1,0 +1,23 @@
+{
+  "expo": {
+    "name": "FreshLane Mobile",
+    "slug": "freshlane-mobile",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "scheme": "freshlane",
+    "splash": {
+      "resizeMode": "contain",
+      "backgroundColor": "#f7f5ef"
+    },
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#f7f5ef"
+      }
+    }
+  }
+}
