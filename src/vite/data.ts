@@ -26,6 +26,7 @@ export type DemoMeal = {
   image_url: string;
   price_cents: number;
   prep_minutes: number;
+  is_available?: boolean;
 };
 
 export type DemoProduct = {

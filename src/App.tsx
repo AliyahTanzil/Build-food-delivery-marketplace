@@ -23,8 +23,8 @@ import {
   Trash2,
   Utensils
 } from "lucide-react";
-import { categories, meals, orders, products as initialProducts, restaurants } from "@/vite/data";
-import type { DemoProduct } from "@/vite/data";
+import { categories, meals as initialMeals, orders, products as initialProducts, restaurants } from "@/vite/data";
+import type { DemoMeal, DemoProduct } from "@/vite/data";
 import type { Role } from "@/lib/types";
 import { cn, formatMoney } from "@/lib/utils";
 
@@ -114,6 +114,7 @@ function roleHome(role: Role) {
 }
 
 function protectedRoleForPath(path: string): Role | null {
+  if ((path.startsWith("/meals/") || path.startsWith("/products/")) && path.endsWith("/edit")) return "admin";
   if (path === "/seller") return "seller";
   if (path === "/driver") return "driver";
   if (path === "/admin") return "admin";
@@ -490,7 +491,7 @@ function AddToCartButton({
   );
 }
 
-function HomePage({ productCatalog }: { productCatalog: DemoProduct[] }) {
+function HomePage({ mealCatalog, productCatalog }: { mealCatalog: DemoMeal[]; productCatalog: DemoProduct[] }) {
   const categoryIcons = [Coffee, Soup, Package, ShoppingBasket, Utensils];
 
   return (
@@ -568,7 +569,7 @@ function HomePage({ productCatalog }: { productCatalog: DemoProduct[] }) {
         <div>
           <SectionHeader compact eyebrow="Ready soon" title="Featured meals" href="/restaurants" cta="Browse food" />
           <div className="grid gap-5 sm:grid-cols-2">
-            {meals.slice(0, 4).map((meal) => (
+            {mealCatalog.filter((meal) => meal.is_available !== false).slice(0, 4).map((meal) => (
               <ItemCard key={meal.id} id={meal.id} type="meal" name={meal.name} description={meal.description} imageUrl={meal.image_url} priceCents={meal.price_cents} meta={`${meal.prep_minutes} min`} />
             ))}
           </div>
@@ -684,9 +685,9 @@ function ProductsPage({ productCatalog }: { productCatalog: DemoProduct[] }) {
   );
 }
 
-function RestaurantDetailPage({ id }: { id: string }) {
+function RestaurantDetailPage({ id, mealCatalog }: { id: string; mealCatalog: DemoMeal[] }) {
   const restaurant = restaurants.find((item) => item.id === id);
-  const menu = meals.filter((meal) => meal.restaurant_id === id);
+  const menu = mealCatalog.filter((meal) => meal.restaurant_id === id && meal.is_available !== false);
 
   if (!restaurant) {
     return <EmptyState title="Restaurant not found" body="That restaurant is no longer available." cta="Browse restaurants" href="/restaurants" />;
@@ -743,11 +744,26 @@ function ListingShell({ eyebrow, title, body, children }: { eyebrow: string; tit
   );
 }
 
-function DetailPage({ type, id, addToCart, productCatalog }: { type: "meal" | "product"; id: string; addToCart: (item: CartItem) => void; productCatalog: DemoProduct[] }) {
-  const record = type === "meal" ? meals.find((item) => item.id === id) : productCatalog.find((item) => item.id === id);
+function DetailPage({
+  type,
+  id,
+  addToCart,
+  mealCatalog,
+  productCatalog,
+  currentUser
+}: {
+  type: "meal" | "product";
+  id: string;
+  addToCart: (item: CartItem) => void;
+  mealCatalog: DemoMeal[];
+  productCatalog: DemoProduct[];
+  currentUser: AuthUser | null;
+}) {
+  const record = type === "meal" ? mealCatalog.find((item) => item.id === id) : productCatalog.find((item) => item.id === id);
   if (!record) return <EmptyState title="Item not found" body="That listing is no longer available." cta="Browse marketplace" href="/products" />;
 
   const meta = type === "meal" && "prep_minutes" in record ? `${record.prep_minutes} minute prep` : `${"stock" in record ? record.stock : 0} in stock`;
+  const editHref = type === "meal" ? `/meals/${record.id}/edit` : `/products/${record.id}/edit`;
 
   return (
     <main className="mx-auto grid max-w-7xl gap-8 px-4 py-10 lg:grid-cols-[1fr_420px]">
@@ -763,14 +779,84 @@ function DetailPage({ type, id, addToCart, productCatalog }: { type: "meal" | "p
           {type === "meal" ? <Clock size={18} /> : <PackageCheck size={18} />} {meta}
         </p>
         <AddToCartButton item={{ id: record.id, type, quantity: 1 }} onAdd={addToCart} />
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Link href="/cart" className="inline-flex h-11 items-center justify-center rounded-md border border-ink/15 px-5 text-sm font-semibold text-ink">
+            View cart
+          </Link>
+          {currentUser?.role === "admin" ? (
+            <Link href={editHref} className="inline-flex h-11 items-center justify-center rounded-md bg-saffron px-5 text-sm font-semibold text-ink">
+              Edit listing
+            </Link>
+          ) : null}
+        </div>
       </section>
     </main>
   );
 }
 
-function CartPage({ cart, updateQuantity, productCatalog }: { cart: CartItem[]; updateQuantity: (item: CartItem) => void; productCatalog: DemoProduct[] }) {
+function AdminListingEditPage({
+  type,
+  id,
+  mealCatalog,
+  productCatalog,
+  updateMeal,
+  updateProduct
+}: {
+  type: "meal" | "product";
+  id: string;
+  mealCatalog: DemoMeal[];
+  productCatalog: DemoProduct[];
+  updateMeal: (id: string, updates: Partial<DemoMeal>) => void;
+  updateProduct: (id: string, updates: Partial<DemoProduct>) => void;
+}) {
+  const meal = type === "meal" ? mealCatalog.find((item) => item.id === id) : undefined;
+  const product = type === "product" ? productCatalog.find((item) => item.id === id) : undefined;
+  const record = meal ?? product;
+
+  if (!record) {
+    return <EmptyState title="Listing not found" body="That meal or product is no longer available." cta="Back to admin" href="/admin" />;
+  }
+
+  return (
+    <main className="mx-auto grid max-w-7xl gap-6 px-4 py-8 lg:grid-cols-[320px_1fr]">
+      <aside className="h-fit rounded-md border border-ink/10 bg-white p-5 shadow-sm">
+        <img src={record.image_url} alt={record.name} className="aspect-square w-full rounded-md object-cover" />
+        <h1 className="mt-5 text-2xl font-black text-ink">Edit {record.name}</h1>
+        <p className="mt-2 text-sm text-ink/60">
+          Admins can edit every prepared food and packaged product from this screen.
+        </p>
+        <div className="mt-5 grid gap-3">
+          <Link href={type === "meal" ? `/meals/${record.id}` : `/products/${record.id}`} className="inline-flex h-11 items-center justify-center rounded-md bg-ink px-5 text-sm font-semibold text-white">
+            Preview listing
+          </Link>
+          <Link href="/cart" className="inline-flex h-11 items-center justify-center rounded-md border border-ink/15 px-5 text-sm font-semibold text-ink">
+            View cart
+          </Link>
+        </div>
+      </aside>
+      <section className="rounded-md border border-ink/10 bg-white p-5 shadow-sm">
+        <div className="flex flex-col justify-between gap-3 border-b border-ink/10 pb-5 md:flex-row md:items-center">
+          <div>
+            <p className="text-sm font-bold uppercase tracking-[0.18em] text-leaf">Admin editor</p>
+            <h2 className="text-3xl font-black text-ink">{type === "meal" ? "Prepared food" : "Packaged product"}</h2>
+          </div>
+          <span className="rounded-md bg-saffron/25 px-3 py-2 text-sm font-black text-ink">Autosaves locally</span>
+        </div>
+        <div className="mt-5">
+          {meal ? (
+            <MealEditor meal={meal} updateMeal={updateMeal} />
+          ) : product ? (
+            <ProductEditor product={product} updateProduct={updateProduct} />
+          ) : null}
+        </div>
+      </section>
+    </main>
+  );
+}
+
+function CartPage({ cart, updateQuantity, mealCatalog, productCatalog }: { cart: CartItem[]; updateQuantity: (item: CartItem) => void; mealCatalog: DemoMeal[]; productCatalog: DemoProduct[] }) {
   const lines = cart.map((item) => {
-    const record = item.type === "meal" ? meals.find((meal) => meal.id === item.id) : productCatalog.find((product) => product.id === item.id);
+    const record = item.type === "meal" ? mealCatalog.find((meal) => meal.id === item.id) : productCatalog.find((product) => product.id === item.id);
     return { ...item, record };
   }).filter((line) => line.record);
   const subtotal = lines.reduce((sum, line) => sum + (line.record?.price_cents ?? 0) * line.quantity, 0);
@@ -816,9 +902,9 @@ function OrderSummary({ subtotal }: { subtotal: number }) {
   );
 }
 
-function CheckoutPage({ cart, productCatalog }: { cart: CartItem[]; productCatalog: DemoProduct[] }) {
+function CheckoutPage({ cart, mealCatalog, productCatalog }: { cart: CartItem[]; mealCatalog: DemoMeal[]; productCatalog: DemoProduct[] }) {
   const subtotal = cart.reduce((sum, line) => {
-    const record = line.type === "meal" ? meals.find((item) => item.id === line.id) : productCatalog.find((item) => item.id === line.id);
+    const record = line.type === "meal" ? mealCatalog.find((item) => item.id === line.id) : productCatalog.find((item) => item.id === line.id);
     return sum + (record?.price_cents ?? 0) * line.quantity;
   }, 0);
 
@@ -921,12 +1007,14 @@ function CustomerDashboard({ currentUser }: { currentUser: AuthUser }) {
 
 function SellerDashboard({
   currentUser,
+  mealCatalog,
   productCatalog,
   addProduct,
   updateProduct,
   deleteProduct
 }: {
   currentUser: AuthUser;
+  mealCatalog: DemoMeal[];
   productCatalog: DemoProduct[];
   addProduct: (product: DemoProduct) => void;
   updateProduct: (id: string, updates: Partial<DemoProduct>) => void;
@@ -1015,7 +1103,7 @@ function SellerDashboard({
           ))}
         </Panel>
         <section className="grid gap-6 lg:grid-cols-2">
-          <Panel title="Meals">{meals.slice(0, 4).map((meal) => <Row key={meal.id} left={meal.name} sub={`${meal.prep_minutes} min`} right={formatMoney(meal.price_cents)} href={`/meals/${meal.id}`} />)}</Panel>
+          <Panel title="Meals">{mealCatalog.slice(0, 4).map((meal) => <Row key={meal.id} left={meal.name} sub={`${meal.prep_minutes} min`} right={formatMoney(meal.price_cents)} href={`/meals/${meal.id}`} />)}</Panel>
           <Panel title="Packaged products">{productCatalog.slice(0, 4).map((product) => <Row key={product.id} left={product.name} sub={`${product.stock} in stock`} right={formatMoney(product.price_cents)} href={`/products/${product.id}`} />)}</Panel>
         </section>
       </div>
@@ -1030,7 +1118,7 @@ function ProductEditor({
 }: {
   product: DemoProduct;
   updateProduct: (id: string, updates: Partial<DemoProduct>) => void;
-  deleteProduct: (id: string) => void;
+  deleteProduct?: (id: string) => void;
 }) {
   return (
     <div className="grid gap-4 rounded-md bg-cloud p-4 lg:grid-cols-[120px_1fr]">
@@ -1070,18 +1158,75 @@ function ProductEditor({
           <span>Route: /products/{product.id}</span>
           <div className="flex flex-wrap gap-3">
             <Link href={`/products/${product.id}`} className="font-bold text-leaf">Preview listing</Link>
-            <button
-              type="button"
-              className="inline-flex items-center gap-1 font-bold text-tomato"
-              onClick={() => {
-                if (window.confirm(`Delete ${product.name}? This removes it from the marketplace and cart.`)) {
-                  deleteProduct(product.id);
-                }
-              }}
-            >
-              <Trash2 size={15} /> Delete
-            </button>
+            {deleteProduct ? (
+              <button
+                type="button"
+                className="inline-flex items-center gap-1 font-bold text-tomato"
+                onClick={() => {
+                  if (window.confirm(`Delete ${product.name}? This removes it from the marketplace and cart.`)) {
+                    deleteProduct(product.id);
+                  }
+                }}
+              >
+                <Trash2 size={15} /> Delete
+              </button>
+            ) : null}
           </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MealEditor({
+  meal,
+  updateMeal
+}: {
+  meal: DemoMeal;
+  updateMeal: (id: string, updates: Partial<DemoMeal>) => void;
+}) {
+  return (
+    <div className="grid gap-4 rounded-md bg-cloud p-4 lg:grid-cols-[120px_1fr]">
+      <img src={meal.image_url} alt={meal.name} className="aspect-square w-full rounded-md object-cover" />
+      <div className="grid gap-3">
+        <div className="grid gap-3 md:grid-cols-2">
+          <Field label="Meal name">
+            <Input value={meal.name} onChange={(event) => updateMeal(meal.id, { name: event.target.value })} />
+          </Field>
+          <Field label="Price">
+            <Input type="number" min={0} step="0.01" value={(meal.price_cents / 100).toFixed(2)} onChange={(event) => updateMeal(meal.id, { price_cents: Math.round(Number(event.target.value || 0) * 100) })} />
+          </Field>
+        </div>
+        <Field label="Image URL">
+          <Input value={meal.image_url} onChange={(event) => updateMeal(meal.id, { image_url: event.target.value })} />
+        </Field>
+        <Field label="Description">
+          <Textarea value={meal.description} onChange={(event) => updateMeal(meal.id, { description: event.target.value })} />
+        </Field>
+        <div className="grid gap-3 md:grid-cols-3">
+          <Field label="Restaurant">
+            <Select value={meal.restaurant_id} onChange={(event) => updateMeal(meal.id, { restaurant_id: event.target.value })}>
+              {restaurants.map((restaurant) => <option key={restaurant.id} value={restaurant.id}>{restaurant.name}</option>)}
+            </Select>
+          </Field>
+          <Field label="Category">
+            <Select value={meal.category_slug} onChange={(event) => updateMeal(meal.id, { category_slug: event.target.value })}>
+              {categories.map((category) => <option key={category.id} value={category.slug}>{category.name}</option>)}
+            </Select>
+          </Field>
+          <Field label="Prep minutes">
+            <Input type="number" min={0} value={meal.prep_minutes} onChange={(event) => updateMeal(meal.id, { prep_minutes: Number(event.target.value || 0) })} />
+          </Field>
+        </div>
+        <Field label="Availability">
+          <Select value={meal.is_available === false ? "unavailable" : "available"} onChange={(event) => updateMeal(meal.id, { is_available: event.target.value === "available" })}>
+            <option value="available">Available on menus</option>
+            <option value="unavailable">Hidden from menus</option>
+          </Select>
+        </Field>
+        <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-ink/60">
+          <span>Route: /meals/{meal.id}</span>
+          <Link href={`/meals/${meal.id}`} className="font-bold text-leaf">Preview listing</Link>
         </div>
       </div>
     </div>
@@ -1114,12 +1259,16 @@ function DriverDashboard({ currentUser }: { currentUser: AuthUser }) {
 function AdminDashboard({
   currentUser,
   users,
+  mealCatalog,
+  productCatalog,
   addUser,
   updateUser,
   deleteUser
 }: {
   currentUser: AuthUser;
   users: AuthUser[];
+  mealCatalog: DemoMeal[];
+  productCatalog: DemoProduct[];
   addUser: (user: Omit<AuthUser, "id">) => { ok: true; user: AuthUser } | { ok: false; message: string };
   updateUser: (id: string, updates: Partial<AuthUser>) => void;
   deleteUser: (id: string) => void;
@@ -1297,6 +1446,22 @@ function AdminDashboard({
             {categories.map((category) => <span key={category.id} className="rounded-md bg-cloud px-3 py-2 text-sm font-semibold text-ink/70">{category.name}</span>)}
           </div>
         </Panel>
+        <Panel title="Manage meals and products">
+          <div className="grid gap-3 lg:grid-cols-2">
+            <div className="grid gap-3">
+              <h3 className="text-lg font-black text-ink">Prepared foods</h3>
+              {mealCatalog.map((meal) => (
+                <Row key={meal.id} left={meal.name} sub={`${meal.prep_minutes} min · ${meal.is_available === false ? "hidden" : "available"}`} right="Edit" href={`/meals/${meal.id}/edit`} />
+              ))}
+            </div>
+            <div className="grid gap-3">
+              <h3 className="text-lg font-black text-ink">Packaged products</h3>
+              {productCatalog.map((product) => (
+                <Row key={product.id} left={product.name} sub={`${product.stock} in stock · ${product.is_available === false ? "hidden" : "available"}`} right="Edit" href={`/products/${product.id}/edit`} />
+              ))}
+            </div>
+          </div>
+        </Panel>
       </div>
     </DashboardShell>
   );
@@ -1351,6 +1516,13 @@ export default function App() {
   });
   const [currentUserId, setCurrentUserId] = useState<string | null>(() => localStorage.getItem(activeUserKey));
   const currentUser = useMemo(() => users.find((user) => user.id === currentUserId) ?? null, [currentUserId, users]);
+  const [mealCatalog, setMealCatalog] = useState<DemoMeal[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem("freshlane-meals") ?? "null") as DemoMeal[] || initialMeals;
+    } catch {
+      return initialMeals;
+    }
+  });
   const [productCatalog, setProductCatalog] = useState<DemoProduct[]>(() => {
     try {
       return JSON.parse(localStorage.getItem("freshlane-products") ?? "null") as DemoProduct[] || initialProducts;
@@ -1383,6 +1555,10 @@ export default function App() {
   }, [cart]);
 
   useEffect(() => {
+    localStorage.setItem("freshlane-meals", JSON.stringify(mealCatalog));
+  }, [mealCatalog]);
+
+  useEffect(() => {
     localStorage.setItem("freshlane-products", JSON.stringify(productCatalog));
   }, [productCatalog]);
 
@@ -1409,6 +1585,10 @@ export default function App() {
 
   const updateProduct = (id: string, updates: Partial<DemoProduct>) => {
     setProductCatalog((current) => current.map((product) => product.id === id ? { ...product, ...updates } : product));
+  };
+
+  const updateMeal = (id: string, updates: Partial<DemoMeal>) => {
+    setMealCatalog((current) => current.map((meal) => meal.id === id ? { ...meal, ...updates } : meal));
   };
 
   const deleteProduct = (id: string) => {
@@ -1508,24 +1688,26 @@ export default function App() {
       return <AccessDenied currentUser={currentUser} requiredRole={requiredRole} />;
     }
 
-    if (path === "/") return <HomePage productCatalog={productCatalog} />;
+    if (path === "/") return <HomePage mealCatalog={mealCatalog} productCatalog={productCatalog} />;
     if (path === "/login") return <AuthPage mode="login" users={users} onLogin={login} onSignup={signup} />;
     if (path === "/signup") return <AuthPage mode="signup" users={users} onLogin={login} onSignup={signup} />;
     if (path === "/restaurants") return <RestaurantsPage />;
-    if (path.startsWith("/restaurants/")) return <RestaurantDetailPage id={path.split("/").pop() ?? ""} />;
+    if (path.startsWith("/restaurants/")) return <RestaurantDetailPage id={path.split("/").pop() ?? ""} mealCatalog={mealCatalog} />;
     if (path === "/products") return <ProductsPage productCatalog={productCatalog} />;
-    if (path.startsWith("/meals/")) return <DetailPage type="meal" id={path.split("/").pop() ?? ""} addToCart={addToCart} productCatalog={productCatalog} />;
-    if (path.startsWith("/products/")) return <DetailPage type="product" id={path.split("/").pop() ?? ""} addToCart={addToCart} productCatalog={productCatalog} />;
-    if (path === "/cart") return <CartPage cart={cart} updateQuantity={updateQuantity} productCatalog={productCatalog} />;
-    if (path === "/checkout") return <CheckoutPage cart={cart} productCatalog={productCatalog} />;
+    if (path.startsWith("/meals/") && path.endsWith("/edit")) return <AdminListingEditPage type="meal" id={path.split("/")[2] ?? ""} mealCatalog={mealCatalog} productCatalog={productCatalog} updateMeal={updateMeal} updateProduct={updateProduct} />;
+    if (path.startsWith("/products/") && path.endsWith("/edit")) return <AdminListingEditPage type="product" id={path.split("/")[2] ?? ""} mealCatalog={mealCatalog} productCatalog={productCatalog} updateMeal={updateMeal} updateProduct={updateProduct} />;
+    if (path.startsWith("/meals/")) return <DetailPage type="meal" id={path.split("/").pop() ?? ""} addToCart={addToCart} mealCatalog={mealCatalog} productCatalog={productCatalog} currentUser={currentUser} />;
+    if (path.startsWith("/products/")) return <DetailPage type="product" id={path.split("/").pop() ?? ""} addToCart={addToCart} mealCatalog={mealCatalog} productCatalog={productCatalog} currentUser={currentUser} />;
+    if (path === "/cart") return <CartPage cart={cart} updateQuantity={updateQuantity} mealCatalog={mealCatalog} productCatalog={productCatalog} />;
+    if (path === "/checkout") return <CheckoutPage cart={cart} mealCatalog={mealCatalog} productCatalog={productCatalog} />;
     if (path === "/orders") return <OrdersPage />;
     if (path.startsWith("/orders/")) return <OrderTrackingPage id={path.split("/").pop() ?? ""} />;
     if (path === "/customer" && currentUser) return <CustomerDashboard currentUser={currentUser} />;
-    if (path === "/seller" && currentUser) return <SellerDashboard currentUser={currentUser} productCatalog={productCatalog} addProduct={addProduct} updateProduct={updateProduct} deleteProduct={deleteProduct} />;
+    if (path === "/seller" && currentUser) return <SellerDashboard currentUser={currentUser} mealCatalog={mealCatalog} productCatalog={productCatalog} addProduct={addProduct} updateProduct={updateProduct} deleteProduct={deleteProduct} />;
     if (path === "/driver" && currentUser) return <DriverDashboard currentUser={currentUser} />;
-    if (path === "/admin" && currentUser) return <AdminDashboard currentUser={currentUser} users={users} addUser={addUser} updateUser={updateUser} deleteUser={deleteUser} />;
+    if (path === "/admin" && currentUser) return <AdminDashboard currentUser={currentUser} users={users} mealCatalog={mealCatalog} productCatalog={productCatalog} addUser={addUser} updateUser={updateUser} deleteUser={deleteUser} />;
     return <EmptyState title="Page not found" body="That route is not available in the Vite app." cta="Go home" href="/" />;
-  }, [cart, currentUser, path, productCatalog, users]);
+  }, [cart, currentUser, mealCatalog, path, productCatalog, users]);
 
   return (
     <>
