@@ -1,5 +1,7 @@
 import { StatusBar } from "expo-status-bar";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import * as Location from "expo-location";
+import { supabase } from "./src/supabase";
 import type React from "react";
 import {
   Alert,
@@ -26,6 +28,7 @@ type Screen =
   | "cart"
   | "checkout"
   | "orders"
+  | "tracking"
   | "customer"
   | "seller"
   | "driver"
@@ -43,6 +46,7 @@ const roleScreens: Record<Role, Screen> = {
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>("home");
+  const [trackingOrderId, setTrackingOrderId] = useState<string | null>(null);
   const [detailTarget, setDetailTarget] = useState<DetailTarget>({ type: "product", id: "granola" });
   const [users, setUsers] = useState<AuthUser[]>(seedUsers);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
@@ -484,7 +488,72 @@ function CheckoutScreen({
   );
 }
 
-function OrdersScreen({ orders }: { orders: DemoOrder[] }) {
+function TrackingScreen({ orderId, setScreen }: { orderId: string; setScreen: (s: Screen) => void }) {
+  const [location, setLocation] = useState<{ lat: number; lng: number } | null>(null);
+
+  useEffect(() => {
+    async function fetchLocation() {
+      try {
+        const { data } = await supabase
+          .from("delivery_locations")
+          .select("*")
+          .eq("delivery_id", orderId)
+          .order("created_at", { ascending: false })
+          .limit(1);
+
+        if (data && data.length > 0) {
+          setLocation({ lat: Number(data[0].latitude), lng: Number(data[0].longitude) });
+        }
+      } catch (e) {
+        console.warn("Error fetching initial location:", e);
+      }
+    }
+
+    fetchLocation();
+
+    const channel = supabase
+      .channel(`delivery-${orderId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "delivery_locations",
+          filter: `delivery_id=eq.${orderId}`
+        },
+        (payload) => {
+          setLocation({ lat: Number(payload.new.latitude), lng: Number(payload.new.longitude) });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [orderId]);
+
+  return (
+    <ScreenWrap>
+      <Text style={styles.title}>Live Tracking {orderId}</Text>
+      <View style={[styles.panel, { height: 250, justifyContent: "center", alignItems: "center" }]}>
+        {location ? (
+          <>
+            <Text style={styles.cardTitle}>Driver Location</Text>
+            <Text style={styles.price}>
+              {location.lat.toFixed(5)}, {location.lng.toFixed(5)}
+            </Text>
+            <Text style={styles.muted}>Updating in real-time...</Text>
+          </>
+        ) : (
+          <Text style={styles.muted}>Waiting for driver to share location...</Text>
+        )}
+      </View>
+      <SecondaryButton label="Back to Orders" onPress={() => setScreen("orders")} />
+    </ScreenWrap>
+  );
+}
+
+function OrdersScreen({ orders, setScreen, setTrackingOrderId }: { orders: DemoOrder[]; setScreen: (s: Screen) => void; setTrackingOrderId: (id: string) => void }) {
   return (
     <ScreenWrap>
       <Text style={styles.title}>Orders and tracking</Text>
@@ -496,7 +565,13 @@ function OrdersScreen({ orders }: { orders: DemoOrder[] }) {
           {order.items.map((item) => <Text key={item} style={styles.small}>{item}</Text>)}
           <Text style={styles.price}>{formatMoney(order.total_cents)}</Text>
           {order.status !== "delivered" ? (
-            <PrimaryButton label="Track Live Location" onPress={() => Alert.alert("Live Tracking", `Opening tracking for ${order.id}`)} />
+            <PrimaryButton
+              label="Track Live Location"
+              onPress={() => {
+                setTrackingOrderId(order.id);
+                setScreen("tracking");
+              }}
+            />
           ) : null}
         </View>
       ))}
@@ -575,7 +650,53 @@ function DriverDashboard({ user, orders, setOrders }: { user: AuthUser | null; o
   if (!user) return null;
   const [isOnline, setIsOnline] = useState(false);
   const statuses: OrderStatus[] = ["accepted", "picked_up", "on_the_way", "delivered"];
-  
+
+  useEffect(() => {
+    let subscription: Location.LocationSubscription | null = null;
+
+    async function startTracking() {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== "granted") {
+        Alert.alert("Permission denied", "Allow location access to start tracking");
+        setIsOnline(false);
+        return;
+      }
+
+      subscription = await Location.watchPositionAsync(
+        {
+          accuracy: Location.Accuracy.High,
+          distanceInterval: 10,
+        },
+        async (location) => {
+          const { latitude, longitude } = location.coords;
+          const activeDelivery = orders.find((o) => o.status === "on_the_way");
+          if (activeDelivery) {
+            try {
+              // In production, these would be valid UUIDs from the database
+              await supabase.from("delivery_locations").insert({
+                delivery_id: activeDelivery.id,
+                driver_id: user.id,
+                latitude,
+                longitude
+              });
+            } catch (e) {
+              console.warn("Location sync error:", e);
+            }
+          }
+          console.log("Driver location update:", latitude, longitude);
+        }
+      );
+    }
+
+    if (isOnline) {
+      startTracking();
+    }
+
+    return () => {
+      if (subscription) subscription.remove();
+    };
+  }, [isOnline, orders, user.id]);
+
   return (
     <ScreenWrap>
       <Text style={styles.title}>Driver dashboard</Text>
