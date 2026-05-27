@@ -1444,8 +1444,14 @@ function AdminDashboard({
     }
   }, [selectedUserId, users]);
 
+  const canEditSelf = currentUser.role === "super-admin";
+
   return (
-    <DashboardShell title="Admin" subtitle={`${currentUser.full_name}, manage users, sellers, listings, categories, revenue, and commission.`} nav={dashboardNav.admin}>
+    <DashboardShell 
+      title={currentUser.role === "super-admin" ? "Super Admin" : "Admin"} 
+      subtitle={`${currentUser.full_name}, manage platform users and global settings.`} 
+      nav={dashboardNav[currentUser.role as keyof typeof dashboardNav]}
+    >
       <div className="grid gap-6">
         <Stats cards={[["Orders", "24", ShoppingCart], ["Revenue", formatMoney(128940), CreditCard], ["Commission", formatMoney(15472), ShieldCheck], ["Categories", "5", Package]]} />
         
@@ -1611,7 +1617,7 @@ function AdminDashboard({
                 </Field>
                 <div className="grid gap-3 md:grid-cols-3">
                   <Field label="Role">
-                    <Select value={selectedUser.role} disabled={selectedUser.id === currentUser.id} onChange={(event) => updateUser(selectedUser.id, { role: event.target.value as Role })}>
+                    <Select value={selectedUser.role} disabled={selectedUser.id === currentUser.id && !canEditSelf} onChange={(event) => updateUser(selectedUser.id, { role: event.target.value as Role })}>
                       <option value="customer">Customer</option>
                       <option value="seller">Seller</option>
                       <option value="driver">Driver</option>
@@ -1620,7 +1626,7 @@ function AdminDashboard({
                     </Select>
                   </Field>
                   <Field label="Status">
-                    <Select value={selectedUser.status} disabled={selectedUser.id === currentUser.id} onChange={(event) => updateUser(selectedUser.id, { status: event.target.value as AuthStatus })}>
+                    <Select value={selectedUser.status} disabled={selectedUser.id === currentUser.id && !canEditSelf} onChange={(event) => updateUser(selectedUser.id, { status: event.target.value as AuthStatus })}>
                       <option value="active">Active</option>
                       <option value="pending">Pending</option>
                       <option value="disabled">Disabled</option>
@@ -1854,7 +1860,8 @@ export default function App() {
       if (user.id !== id) return user;
 
       const next = { ...user, ...updates };
-      if (id === currentUserId) {
+      // Allow super-admin to edit their own role/status
+      if (id === currentUserId && currentUser?.role !== "super-admin") {
         next.role = user.role;
         next.status = user.status;
       }

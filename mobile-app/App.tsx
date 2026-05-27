@@ -126,7 +126,7 @@ export default function App() {
     setUsers((current) => current.map((user) => {
       if (user.id !== id) return user;
       const next = { ...user, ...updates };
-      if (id === currentUserId) {
+      if (id === currentUserId && currentUser?.role !== "super-admin") {
         next.role = user.role;
         next.status = user.status;
       }
@@ -652,7 +652,12 @@ function AdminDashboard({
       {selectedUser ? (
         <View style={styles.panel}>
           <Text style={styles.cardTitle}>Editing {selectedUser.full_name}</Text>
-          <UserForm user={selectedUser} onChange={(updates) => updateUser(selectedUser.id, updates)} partial lockRoleStatus={selectedUser.id === user.id} />
+          <UserForm 
+            user={selectedUser} 
+            onChange={(updates) => updateUser(selectedUser.id, updates)} 
+            partial 
+            lockRoleStatus={selectedUser.id === user.id && user.role !== "super-admin"} 
+          />
           <DangerButton label="Delete user" disabled={selectedUser.id === user.id} onPress={() => deleteUser(selectedUser.id)} />
         </View>
       ) : null}
