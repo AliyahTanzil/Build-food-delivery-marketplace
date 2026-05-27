@@ -1,0 +1,41 @@
+# dependencies
+node_modules/
+
+# builds and framework output
+dist/
+.next/
+out/
+
+# legacy Next.js prototype files kept locally after Vite migration
+middleware.ts
+next-env.d.ts
+next.config.mjs
+src/app/
+src/components/
+src/lib/auth.ts
+src/lib/stripe.ts
+src/lib/supabase/
+
+# local caches
+.npm-cache/
+.turbo/
+.vite/
+*.tsbuildinfo
+
+# environment files
+.env
+.env.local
+.env.*.local
+
+# logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# OS/editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

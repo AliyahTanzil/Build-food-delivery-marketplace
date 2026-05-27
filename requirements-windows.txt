@@ -1,0 +1,41 @@
+# FreshLane Marketplace - Windows Requirements
+
+## Web-site Dependencies
+@supabase/supabase-js
+clsx
+lucide-react
+react
+react-dom
+tailwind-merge
+zod
+
+## Web-site DevDependencies
+@eslint/eslintrc
+@types/node
+@types/react
+@types/react-dom
+@vitejs/plugin-react
+autoprefixer
+eslint
+postcss
+tailwindcss
+typescript
+vite
+
+## Mobile-app Dependencies
+@expo/metro-runtime
+expo
+expo-asset
+expo-status-bar
+react
+react-dom
+react-native
+react-native-web
+
+## Mobile-app DevDependencies
+@types/react
+typescript
+
+## Windows Specific Tools
+# (Usually node/npm is installed via installer or nvm-windows)
+# Ensure you have Node.js 18+ installed.
