@@ -36,6 +36,15 @@ export const seedUsers: AuthUser[] = [
     role: "admin",
     status: "active",
     address: "FreshLane HQ, Freetown"
+  },
+  {
+    id: "super-admin-ali",
+    full_name: "Aliyah Tanzil",
+    email: "super@example.com",
+    password: "DemoPass123!",
+    role: "super-admin",
+    status: "active",
+    address: "FreshLane Global HQ, Freetown"
   }
 ];
 

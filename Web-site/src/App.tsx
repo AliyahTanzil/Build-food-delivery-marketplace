@@ -85,6 +85,15 @@ const seedAuthUsers: AuthUser[] = [
     role: "admin",
     status: "active",
     address: "FreshLane HQ, Freetown"
+  },
+  {
+    id: "super-admin-ali",
+    full_name: "Aliyah Tanzil",
+    email: "super@example.com",
+    password: "DemoPass123!",
+    role: "super-admin",
+    status: "active",
+    address: "FreshLane Global HQ, Freetown"
   }
 ];
 
@@ -103,13 +112,14 @@ const dashboardNav = {
     ["/seller", "Orders"]
   ],
   driver: [["/driver", "Assigned deliveries"]],
-  admin: [["/admin", "Overview"]]
+  admin: [["/admin", "Overview"]],
+  "super-admin": [["/admin", "Global Overview"], ["/admin", "User Overrides"], ["/admin", "Platform Stats"]]
 };
 
 function roleHome(role: Role) {
   if (role === "seller") return "/seller";
   if (role === "driver") return "/driver";
-  if (role === "admin") return "/admin";
+  if (role === "admin" || role === "super-admin") return "/admin";
   return "/customer";
 }
 
@@ -347,6 +357,7 @@ function AuthPage({
               <option value="seller">Seller / Restaurant</option>
               <option value="driver">Delivery driver</option>
               <option value="admin">Admin</option>
+              <option value="super-admin">Super-Admin</option>
             </Select>
           </Field>
         ) : null}
@@ -951,24 +962,132 @@ function OrderTrackingPage({ id }: { id: string }) {
   const order = orders.find((item) => item.id === id) ?? orders[0];
   const statuses = ["pending", "accepted", "preparing", "picked_up", "on_the_way", "delivered"];
   const current = statuses.indexOf(order.status);
+  const [driverPos, setDriverPos] = useState({ x: 20, y: 80 });
+  const [showNotification, setShowNotification] = useState(false);
+
+  useEffect(() => {
+    if (order.status === "on_the_way") {
+      const interval = setInterval(() => {
+        setDriverPos((pos) => ({
+          x: Math.min(pos.x + 2, 80),
+          y: Math.max(pos.y - 1.5, 20)
+        }));
+      }, 2000);
+      return () => clearInterval(interval);
+    }
+  }, [order.status]);
+
+  useEffect(() => {
+    if (order.status === "delivered") {
+      setShowNotification(true);
+      const timer = setTimeout(() => setShowNotification(false), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [order.status]);
+
   return (
-    <main className="mx-auto grid max-w-6xl gap-8 px-4 py-8 lg:grid-cols-[1fr_360px]">
-      <section className="rounded-md border border-ink/10 bg-white p-6 shadow-sm">
-        <p className="text-sm font-bold uppercase tracking-[0.18em] text-leaf">Tracking</p>
-        <h1 className="mt-2 text-3xl font-black text-ink">Order {order.id}</h1>
-        <div className="mt-8 grid gap-4">
-          {statuses.map((status, index) => (
-            <div key={status} className="flex items-center gap-3">
-              <CheckCircle2 className={index <= current ? "text-leaf" : "text-ink/25"} />
-              <span className={index <= current ? "font-bold capitalize text-ink" : "font-semibold capitalize text-ink/40"}>{status.replaceAll("_", " ")}</span>
+    <main className="mx-auto grid max-w-7xl gap-8 px-4 py-8 lg:grid-cols-[1fr_360px]">
+      {showNotification && (
+        <div className="fixed right-5 top-20 z-50 flex items-center gap-3 rounded-md bg-leaf p-4 text-white shadow-lg animate-in fade-in slide-in-from-top-4">
+          <PackageCheck size={24} />
+          <div>
+            <p className="font-bold">Order Delivered!</p>
+            <p className="text-sm">Enjoy your meal from {order.items[0]}.</p>
+          </div>
+        </div>
+      )}
+      <section className="grid gap-6">
+        <div className="rounded-md border border-ink/10 bg-white p-6 shadow-sm">
+          <div className="flex items-center justify-between gap-4 border-b border-ink/10 pb-4">
+            <div>
+              <p className="text-sm font-bold uppercase tracking-[0.18em] text-leaf">Tracking</p>
+              <h1 className="mt-1 text-3xl font-black text-ink">Order {order.id}</h1>
             </div>
-          ))}
+            <span className="rounded-md bg-saffron/20 px-3 py-1 text-sm font-bold capitalize text-ink">
+              {order.status.replaceAll("_", " ")}
+            </span>
+          </div>
+          
+          <div className="mt-8 grid gap-6 md:grid-cols-2">
+            <div className="grid gap-4">
+              {statuses.map((status, index) => (
+                <div key={status} className="flex items-center gap-4">
+                  <div className="relative flex flex-col items-center">
+                    <div className={cn("z-10 grid size-8 place-items-center rounded-full border-2 transition-colors", 
+                      index <= current ? "border-leaf bg-leaf text-white" : "border-ink/15 bg-white text-ink/25")}>
+                      {index < current ? <CheckCircle2 size={16} /> : <span className="text-xs font-bold">{index + 1}</span>}
+                    </div>
+                    {index < statuses.length - 1 && (
+                      <div className={cn("absolute top-8 h-8 w-0.5", index < current ? "bg-leaf" : "bg-ink/10")} />
+                    )}
+                  </div>
+                  <span className={cn("font-bold capitalize transition-colors", index <= current ? "text-ink" : "text-ink/30")}>
+                    {status.replaceAll("_", " ")}
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            <div className="relative overflow-hidden rounded-md border border-ink/10 bg-cloud shadow-inner" style={{ height: "300px" }}>
+              <div className="absolute inset-0 opacity-20" style={{ backgroundImage: "radial-gradient(#18211d 1px, transparent 1px)", backgroundSize: "20px 20px" }} />
+              
+              {/* Customer Home */}
+              <div className="absolute left-[80%] top-[20%] flex flex-col items-center">
+                <MapPin className="text-tomato" size={32} />
+                <span className="mt-1 rounded bg-white px-2 py-0.5 text-[10px] font-bold shadow-sm">Home</span>
+              </div>
+
+              {/* Driver Marker */}
+              {order.status !== "delivered" && order.status !== "pending" && (
+                <div 
+                  className="absolute z-20 transition-all duration-1000 ease-linear"
+                  style={{ left: `${driverPos.x}%`, top: `${driverPos.y}%` }}
+                >
+                  <div className="flex flex-col items-center">
+                    <div className="rounded-full bg-leaf p-1.5 text-white shadow-md">
+                      <Bike size={20} />
+                    </div>
+                    <span className="mt-1 rounded bg-leaf px-2 py-0.5 text-[10px] font-bold text-white shadow-sm">Driver</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Status Message Overlay */}
+              <div className="absolute bottom-4 left-4 right-4 rounded-md bg-white/90 p-3 text-center text-xs font-bold text-ink shadow-sm backdrop-blur-sm">
+                {order.status === "on_the_way" ? "Driver is moving towards your location" : 
+                 order.status === "delivered" ? "Order has arrived! Enjoy your food." : 
+                 "Your order is being prepared by the restaurant"}
+              </div>
+            </div>
+          </div>
         </div>
       </section>
-      <aside className="h-fit rounded-md border border-ink/10 bg-white p-5 shadow-sm">
-        <h2 className="text-lg font-black text-ink">Items</h2>
-        <div className="mt-4 grid gap-3 text-sm text-ink/65">{order.items.map((item) => <p key={item}>{item}</p>)}</div>
-        <div className="mt-5 flex justify-between border-t border-ink/10 pt-5 text-lg font-black"><span>Total</span><span>{formatMoney(order.total_cents)}</span></div>
+      
+      <aside className="grid gap-6">
+        <div className="h-fit rounded-md border border-ink/10 bg-white p-5 shadow-sm">
+          <h2 className="text-lg font-black text-ink">Order details</h2>
+          <div className="mt-4 grid gap-3 text-sm text-ink/65">
+            {order.items.map((item) => (
+              <div key={item} className="flex justify-between gap-2">
+                <span>{item}</span>
+                <span className="font-bold text-ink">x1</span>
+              </div>
+            ))}
+          </div>
+          <div className="mt-5 flex justify-between border-t border-ink/10 pt-5 text-lg font-black">
+            <span>Total</span>
+            <span>{formatMoney(order.total_cents)}</span>
+          </div>
+        </div>
+
+        <div className="rounded-md bg-ink p-5 text-white shadow-sm">
+          <h3 className="font-black">Need help?</h3>
+          <p className="mt-1 text-sm text-white/60">Contact your driver or our 24/7 support team.</p>
+          <div className="mt-4 grid gap-2">
+            <button className="rounded-md border border-white/20 py-2 text-sm font-bold hover:bg-white/10">Call driver</button>
+            <button className="rounded-md border border-white/20 py-2 text-sm font-bold hover:bg-white/10">Live support</button>
+          </div>
+        </div>
       </aside>
     </main>
   );
@@ -1235,23 +1354,53 @@ function MealEditor({
 
 function DriverDashboard({ currentUser }: { currentUser: AuthUser }) {
   const [deliveryStatus, setDeliveryStatus] = useState("accepted");
+  const [isOnline, setIsOnline] = useState(false);
 
   return (
     <DashboardShell title="Driver" subtitle={`${currentUser.full_name}, accept assigned deliveries and update progress.`} nav={dashboardNav.driver}>
-      <Panel title="Assigned deliveries">
-        {orders.map((order) => (
-          <div key={order.id} className="grid gap-3 rounded-md bg-cloud p-3 md:grid-cols-[1fr_180px_auto] md:items-center">
-            <span><strong className="text-ink">Delivery {order.id}</strong><span className="mt-1 block text-sm capitalize text-ink/60">{order.status.replaceAll("_", " ")}</span></span>
-            <Select value={deliveryStatus} onChange={(event) => setDeliveryStatus(event.target.value)}>
-              <option value="accepted">accepted</option>
-              <option value="picked_up">picked up</option>
-              <option value="on_the_way">on the way</option>
-              <option value="delivered">delivered</option>
-            </Select>
-            <Button type="button">Update</Button>
+      <div className="grid gap-6">
+        <div className={cn("flex items-center justify-between rounded-md p-4 shadow-sm", isOnline ? "bg-leaf text-white" : "bg-white border border-ink/10 text-ink")}>
+          <div>
+            <p className="text-sm font-bold uppercase tracking-wider opacity-80">Status</p>
+            <h2 className="text-2xl font-black">{isOnline ? "Online & Tracking" : "Offline"}</h2>
           </div>
-        ))}
-      </Panel>
+          <button 
+            onClick={() => setIsOnline(!isOnline)}
+            className={cn("rounded-md px-6 py-2 font-bold transition-colors", isOnline ? "bg-white text-leaf" : "bg-ink text-white")}
+          >
+            {isOnline ? "Go Offline" : "Go Online"}
+          </button>
+        </div>
+
+        <Panel title="Assigned deliveries">
+          {orders.map((order) => (
+            <div key={order.id} className="grid gap-3 rounded-md bg-cloud p-3 md:grid-cols-[1fr_180px_auto] md:items-center">
+              <span>
+                <strong className="text-ink">Delivery {order.id}</strong>
+                <span className="mt-1 block text-sm capitalize text-ink/60">
+                  {order.status.replaceAll("_", " ")}
+                  {isOnline && order.status === "on_the_way" && (
+                    <span className="ml-2 inline-flex items-center gap-1 font-bold text-leaf">
+                      <span className="relative flex h-2 w-2">
+                        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-leaf opacity-75"></span>
+                        <span className="relative inline-flex h-2 w-2 rounded-full bg-leaf"></span>
+                      </span>
+                      Live tracking active
+                    </span>
+                  )}
+                </span>
+              </span>
+              <Select value={order.status === "on_the_way" ? "on_the_way" : deliveryStatus} onChange={(event) => setDeliveryStatus(event.target.value)}>
+                <option value="accepted">accepted</option>
+                <option value="picked_up">picked up</option>
+                <option value="on_the_way">on the way</option>
+                <option value="delivered">delivered</option>
+              </Select>
+              <Button type="button">Update</Button>
+            </div>
+          ))}
+        </Panel>
+      </div>
     </DashboardShell>
   );
 }
@@ -1299,6 +1448,53 @@ function AdminDashboard({
     <DashboardShell title="Admin" subtitle={`${currentUser.full_name}, manage users, sellers, listings, categories, revenue, and commission.`} nav={dashboardNav.admin}>
       <div className="grid gap-6">
         <Stats cards={[["Orders", "24", ShoppingCart], ["Revenue", formatMoney(128940), CreditCard], ["Commission", formatMoney(15472), ShieldCheck], ["Categories", "5", Package]]} />
+        
+        {currentUser.role === "super-admin" && (
+          <Panel title="Live Platform Tracking">
+            <div className="grid gap-4 md:grid-cols-[1fr_280px]">
+              <div className="relative overflow-hidden rounded-md border border-ink/10 bg-cloud shadow-inner" style={{ height: "300px" }}>
+                <div className="absolute inset-0 opacity-20" style={{ backgroundImage: "radial-gradient(#18211d 1px, transparent 1px)", backgroundSize: "20px 20px" }} />
+                
+                {/* Simulated active drivers */}
+                <div className="absolute left-[30%] top-[40%] animate-pulse">
+                  <div className="flex flex-col items-center">
+                    <div className="rounded-full bg-leaf p-1 text-white shadow-md">
+                      <Bike size={14} />
+                    </div>
+                    <span className="mt-1 rounded bg-white px-1 py-0.5 text-[8px] font-bold shadow-sm">Ibrahim (FL-1048)</span>
+                  </div>
+                </div>
+
+                <div className="absolute left-[60%] top-[70%]">
+                  <div className="flex flex-col items-center">
+                    <div className="rounded-full bg-leaf p-1 text-white shadow-md">
+                      <Bike size={14} />
+                    </div>
+                    <span className="mt-1 rounded bg-white px-1 py-0.5 text-[8px] font-bold shadow-sm">Abass (FL-1052)</span>
+                  </div>
+                </div>
+
+                <div className="absolute bottom-4 left-4 rounded-md bg-white/90 p-2 text-[10px] font-bold text-ink shadow-sm">
+                  2 active deliveries in transit
+                </div>
+              </div>
+              
+              <div className="grid content-start gap-3">
+                <h3 className="text-sm font-bold text-ink/70">Active Drivers</h3>
+                {["Ibrahim Sesay", "Abass Kamara"].map((driver) => (
+                  <div key={driver} className="flex items-center justify-between gap-3 rounded-md bg-cloud p-2 text-xs">
+                    <div className="flex items-center gap-2">
+                      <div className="h-2 w-2 rounded-full bg-leaf animate-pulse" />
+                      <span className="font-bold text-ink">{driver}</span>
+                    </div>
+                    <span className="text-ink/60">on the way</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </Panel>
+        )}
+
         <section className="grid gap-6 lg:grid-cols-2">
           <Panel title="Seller approvals">
             {restaurants.slice(0, 4).map((restaurant) => (
@@ -1351,6 +1547,7 @@ function AdminDashboard({
                     <option value="seller">Seller</option>
                     <option value="driver">Driver</option>
                     <option value="admin">Admin</option>
+                    {currentUser.role === "super-admin" ? <option value="super-admin">Super-Admin</option> : null}
                   </Select>
                 </Field>
                 <Field label="Status">
@@ -1419,6 +1616,7 @@ function AdminDashboard({
                       <option value="seller">Seller</option>
                       <option value="driver">Driver</option>
                       <option value="admin">Admin</option>
+                      {currentUser.role === "super-admin" ? <option value="super-admin">Super-Admin</option> : null}
                     </Select>
                   </Field>
                   <Field label="Status">
@@ -1684,7 +1882,7 @@ export default function App() {
       return <AuthRequired role={requiredRole} />;
     }
 
-    if (requiredRole && currentUser && currentUser.role !== requiredRole) {
+    if (requiredRole && currentUser && currentUser.role !== requiredRole && currentUser.role !== "super-admin") {
       return <AccessDenied currentUser={currentUser} requiredRole={requiredRole} />;
     }
 

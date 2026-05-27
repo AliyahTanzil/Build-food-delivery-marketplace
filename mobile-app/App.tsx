@@ -37,7 +37,8 @@ const roleScreens: Record<Role, Screen> = {
   customer: "customer",
   seller: "seller",
   driver: "driver",
-  admin: "admin"
+  admin: "admin",
+  "super-admin": "admin"
 };
 
 export default function App() {
@@ -222,7 +223,7 @@ function Protected({
       </ScreenWrap>
     );
   }
-  if (currentUser.role !== role) {
+  if (currentUser.role !== role && currentUser.role !== "super-admin") {
     return (
       <ScreenWrap>
         <Empty title="Wrong account role" body={`${currentUser.full_name} is logged in as ${currentUser.role}.`} action="My dashboard" onPress={() => setScreen(roleHome(currentUser.role))} />
@@ -494,6 +495,9 @@ function OrdersScreen({ orders }: { orders: DemoOrder[] }) {
           <Text style={styles.status}>{order.status.replaceAll("_", " ")}</Text>
           {order.items.map((item) => <Text key={item} style={styles.small}>{item}</Text>)}
           <Text style={styles.price}>{formatMoney(order.total_cents)}</Text>
+          {order.status !== "delivered" ? (
+            <PrimaryButton label="Track Live Location" onPress={() => Alert.alert("Live Tracking", `Opening tracking for ${order.id}`)} />
+          ) : null}
         </View>
       ))}
     </ScreenWrap>
@@ -569,11 +573,23 @@ function SellerDashboard({
 
 function DriverDashboard({ user, orders, setOrders }: { user: AuthUser | null; orders: DemoOrder[]; setOrders: React.Dispatch<React.SetStateAction<DemoOrder[]>> }) {
   if (!user) return null;
+  const [isOnline, setIsOnline] = useState(false);
   const statuses: OrderStatus[] = ["accepted", "picked_up", "on_the_way", "delivered"];
+  
   return (
     <ScreenWrap>
       <Text style={styles.title}>Driver dashboard</Text>
-      <StatGrid stats={[["Driver", user.full_name], ["Assigned", String(orders.length)], ["Status", "Online"]]} />
+      <View style={[styles.panel, isOnline ? { backgroundColor: colors.leaf } : null]}>
+        <Text style={[styles.cardTitle, isOnline ? { color: colors.white } : null]}>
+          {isOnline ? "Online & Tracking Active" : "Currently Offline"}
+        </Text>
+        <PrimaryButton 
+          label={isOnline ? "Go Offline" : "Go Online"} 
+          onPress={() => setIsOnline(!isOnline)} 
+          style={isOnline ? { backgroundColor: colors.ink } : null}
+        />
+      </View>
+      <StatGrid stats={[["Driver", user.full_name], ["Assigned", String(orders.length)], ["Status", isOnline ? "Active" : "Idle"]]} />
       {orders.map((order) => (
         <View key={order.id} style={styles.panel}>
           <Text style={styles.cardTitle}>Delivery {order.id}</Text>
@@ -693,7 +709,7 @@ function Input(props: React.ComponentProps<typeof TextInput> & { label: string }
 }
 
 function RoleSelector({ value, onChange, disabled }: { value: Role; onChange: (role: Role) => void; disabled?: boolean }) {
-  return <Segmented options={["customer", "seller", "driver", "admin"] as Role[]} value={value} onChange={onChange} disabled={disabled} />;
+  return <Segmented options={["customer", "seller", "driver", "admin", "super-admin"] as Role[]} value={value} onChange={onChange} disabled={disabled} />;
 }
 
 function Segmented<T extends string>({ options, value, onChange, disabled }: { options: T[]; value: T; onChange: (value: T) => void; disabled?: boolean }) {
@@ -785,9 +801,9 @@ function Empty({ title, body, action, onPress }: { title: string; body: string; 
   );
 }
 
-function PrimaryButton({ label, onPress, disabled }: { label: string; onPress: () => void; disabled?: boolean }) {
+function PrimaryButton({ label, onPress, disabled, style }: { label: string; onPress: () => void; disabled?: boolean; style?: any }) {
   return (
-    <Pressable disabled={disabled} style={[styles.primaryButton, disabled ? styles.disabled : null]} onPress={onPress}>
+    <Pressable disabled={disabled} style={[styles.primaryButton, disabled ? styles.disabled : null, style]} onPress={onPress}>
       <Text style={styles.primaryButtonText}>{label}</Text>
     </Pressable>
   );

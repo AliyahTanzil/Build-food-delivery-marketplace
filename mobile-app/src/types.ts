@@ -1,4 +1,4 @@
-export type Role = "customer" | "seller" | "driver" | "admin";
+export type Role = "customer" | "seller" | "driver" | "admin" | "super-admin";
 export type AuthStatus = "active" | "pending" | "disabled";
 export type ItemType = "meal" | "product";
 export type OrderStatus =
