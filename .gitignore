@@ -35,3 +35,27 @@ jspm_packages/
 # Requirement files (ignored by default to allow OS-specific pushing)
 requirements-windows.txt
 requirements-linux.txt
+
+# IDEs, Python, mobile, caches
+.idea/
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+.coverage
+coverage/
+.venv/
+venv/
+pip-wheel-metadata/
+*.egg-info/
+.cache/
+build/
+dist/
+.parcel-cache/
+.gradle/
+android/
+ios/
+.expo/
+*.sqlite3
+
